@@ -11,6 +11,11 @@ import sklearn.metrics as skm
 import scipy.stats as sps 
 from optuna.trial import TrialState
 
+def setup_datafiles():
+    pass
+    return 
+    
+    
 def setup_logging(level="INFO"):
     logLevel = os.environ.get('LOG_LEVEL', 'INFO').upper()
     FORMAT = '%(asctime)s - %(levelname)s: - %(message)s'
@@ -121,6 +126,32 @@ def check_values(df, cols):
         print(f" **** No Invalid Numeric Columns Found ****")
     return inv_columns
 
+def check_df_for_nans(batch, group_id, rows_read, na_rows, na_columns, df_Nans, verbose = False): 
+
+    for (row_id, row) in batch.iterrows():
+
+        row_check = pd.isna(row)
+        bad_columns_count = row_check.astype(int).sum()
+        if  bad_columns_count == 0:
+                if verbose:
+                    print(f" VALID   |{group_id:4d} |{rows_read:6d} | {row_id:3d} |{na_rows:4d} | {row.Metadata_Source:9s} {row.Metadata_Batch[:20]:20s} {row.Metadata_Plate:20s}| {row.Metadata_JCP2022} |{row_check.sum():4d} |")
+        else:
+            na_rows += 1
+            if  bad_columns_count < 1477:
+                print(f" INVALID |{group_id:4d} |{rows_read:6d} | {row_id:3d} |{na_rows:4d} | {row.Metadata_Source:9s} {row.Metadata_Batch[:20]:20s} {row.Metadata_Plate:20s}| {row.Metadata_JCP2022} |{row_check.sum():4d} |{row.index[row_check].to_list()[:4]}")
+                # print(f" {row.index[row_check].to_list()}")
+                na_columns |= set(row.index[pd.isna(row)])
+                df_Nans = pd.concat([df_Nans, row], axis = 1)
+                if verbose:
+                    print(row[check_cols].transpose())
+            else:
+                print(f" INVALID |{group_id:4d} |{rows_read:6d} | {row_id:3d} |{na_rows:4d} | {row.Metadata_Source:9s} {row.Metadata_Batch[:20]:20s} {row.Metadata_Plate:20s}| {row.Metadata_JCP2022} |{row_check.sum():4d} | all numeric columns ")
+                df_Nans = pd.concat([df_Nans, row], axis = 1)
+        rows_read += 1
+
+    return rows_read, na_rows, na_columns, df_Nans
+
+
 def reduce_col_sizes(df, cols):
     flt_cnt, int_cnt = 0, 0 
     for i in  cols:
@@ -164,32 +195,41 @@ def calculate_frequency(feature_column):
     freq = second_max_count / max_count
     return freq
 
-def disp_metadata_file(metadata):
-    print("\n all_profile_columns")
+def disp_metadata_file(metadata, COMPOUND_PROFILE_COLUMNS):
+
     print("-"*80)
-    print(f"  Length  all_profile_columns   : {len(metadata['all_profile_columns'])}")
-    print(f"  Length  COMPOUND_PROFILE_COLUMNS: {len(COMPOUND_PROFILE_COLUMNS)}\n")
-    print(f"  all_profile_columns[:10]  : {metadata['all_profile_columns'][:10]}")
-    print(f"                            : {COMPOUND_PROFILE_COLUMNS[:10]}")
+    print(" all_profile_columns & COMPOUND_PROFILE_COLUMNS")
+    print("-"*80)
+    print(f"  Len all_profile_columns        : {len(metadata['all_profile_columns'])}")
+    print(f"  Len COMPOUND_PROFILE_COLUMNS   : {len(COMPOUND_PROFILE_COLUMNS)}\n")
+    print(f"  all_profile_columns[:10]       : {metadata['all_profile_columns'][:10]}")
+    print(f"  COMPOUND_PROFILE_COLUMNS[:10]  : {COMPOUND_PROFILE_COLUMNS[:10]}")
     print()
-    print(f"  all_profile_columns[10:15]: {metadata['all_profile_columns'][10:15]}")
-    print(f"                     [10:15]: {COMPOUND_PROFILE_COLUMNS[10:15]}")
+    print(f"  all_profile_columns[10:15]     : {metadata['all_profile_columns'][10:15]}")
+    print(f"  COMPOUND_PROFILE_COLUMNS[10:15]: {COMPOUND_PROFILE_COLUMNS[10:15]}")
     print()
-    print(f"  all_profile_columns[15:20]: {metadata['all_profile_columns'][15:20]}")
-    print(f"                     [15:20]: {COMPOUND_PROFILE_COLUMNS[15:20]}")
+    print(f"  all_profile_columns[15:20]     : {metadata['all_profile_columns'][15:20]}")
+    print(f"  COMPOUND_PROFILE_COLUMNS[15:20]: {COMPOUND_PROFILE_COLUMNS[15:20]}")
     print()
-    print(f"  all_profile_columns[-4:]  : {metadata['all_profile_columns'][-4:]}")
-    print(f"                     [-4:]  : {COMPOUND_PROFILE_COLUMNS[-4:]}")
+    print(f"  all_profile_columns[-4:]       : {metadata['all_profile_columns'][-4:]}")
+    print(f"  COMPOUND_PROFILE_COLUMNS[-4:]  : {COMPOUND_PROFILE_COLUMNS[-4:]}")
     
-    for key in ["metadata_columns"]:
-        print(f"\n {key} ")
+    for k in metadata['metadata_columns'].keys():
         print("-"*80)
-        for i in metadata[key].keys():
-            print(f" {i:30s} {len(metadata[key][i]):3d} \n     {metadata[key][i]}")
-            print()
+        print(f" {k}  - length({len(metadata['metadata_columns'][k])} )")
+        print("-"*80)
+        if isinstance(metadata['metadata_columns'][k], list):
+            for v in metadata['metadata_columns'][k]:
+                print(f" \t : list item : {v}")
+    
+        elif isinstance(metadata['metadata_columns'][k], dict):    
+            for i,v in metadata['metadata_columns'][k].items():
+                print(f" \t : key :  {i:25s}     item: {v}")
+        print()
     
     for key in ["all_profile_columns", "metadata_columns", "selected_columns", "parquet_columns"]:
-        print(f"\n {key}   {type(metadata[key])} {len(metadata[key]):5d} entries")
+        print("\n"+"-"*80)
+        print(f" {key}   {type(metadata[key])} {len(metadata[key]):5d} entries")
         print("-"*80)
         if isinstance(metadata[key], dict):
             ttl = 0 
@@ -205,12 +245,13 @@ def disp_metadata_file(metadata):
 ##-------------------------------------------------------------------------------------
 
 
-def compute_classification_metrics(model, y_true, y_pred, top_k =3):
+def compute_classification_metrics(model, y_true, y_pred, top_k =3, mode = 'train'):
     metrics = {}
-    metrics['train_auc'] = model['history']['train']['auc'][-1]
-    metrics['train_logloss'] = model['history']['train']['logloss'][-1]
-    metrics['val_auc']     = model['history']['test']['auc'][-1]
-    metrics['val_logloss'] = model['history']['test']['logloss'][-1]
+    if mode == 'train':
+        metrics['train_auc'] = model['history']['train']['auc'][-1]
+        metrics['train_logloss'] = model['history']['train']['logloss'][-1]
+        metrics['val_auc']     = model['history']['test']['auc'][-1]
+        metrics['val_logloss'] = model['history']['test']['logloss'][-1]
     
     metrics['roc_auc']   = skm.roc_auc_score(y_true, y_score = y_pred)
     metrics['logloss']   = skm.log_loss(y_true, y_pred= y_pred)
@@ -232,27 +273,31 @@ def print_metric_hist(metrics):
         _metric_array = np.array(metrics[key])
         print(f" {key:20s}    {_metric_array.mean():9.5f} +/- {_metric_array.std():.5f}")
     print("-" * 80)    
-    
-def split_Xy(input, y_columns = None ):
-    y_output = input[y_columns]
-    X_output = input.drop(columns=y_columns)        
+ 
+
+def split_Xy(input, y_col = ["Metadata_log10TPSA"] ):
+    if not isinstance(y_col,list):
+        y_col = list(y_col)
+    y_output = input[y_col]
+    X_output = input.drop(columns=y_col)        
     return X_output, y_output
 
-def make_cv_splits(df_profiles, n_folds: int = 5, y_columns = None) -> Iterator[tuple[dd.DataFrame, dd.DataFrame]]:
-    if not isinstance(y_columns,list):
-        y_columns = list(y_columns)
 
-    frac = [1 / n_folds] * n_folds
-    # print(frac, n_folds)
-    splits = df_profiles.random_split(frac, shuffle=True)   
+# def make_cv_splits(df_profiles, n_folds: int = 5, y_columns = None) -> Iterator[tuple[dd.DataFrame, dd.DataFrame]]:
+#     if not isinstance(y_columns,list):
+#         y_columns = list(y_columns)
+
+#     frac = [1 / n_folds] * n_folds
+#     # print(frac, n_folds)
+#     splits = df_profiles.random_split(frac, shuffle=True)   
     
-    for i in range(n_folds):
-        train = [splits[j] for j in range(n_folds) if j != i]
-        train = dd.concat(train)
-        test = splits[i] 
-        X_train, y_train = split_Xy(train, y_columns)
-        X_test , y_test  = split_Xy(test, y_columns)
-        yield (X_train, y_train), (X_test, y_test)
+#     for i in range(n_folds):
+#         train = [splits[j] for j in range(n_folds) if j != i]
+#         train = dd.concat(train)
+#         test = splits[i] 
+#         X_train, y_train = split_Xy(train, y_columns)
+#         X_test , y_test  = split_Xy(test, y_columns)
+#         yield (X_train, y_train), (X_test, y_test)
         
 
 def make_cv_splits_2(df_profiles, n_folds: int = 10, y_columns = None) -> Iterator[tuple[dd.DataFrame, dd.DataFrame]]:
@@ -269,13 +314,18 @@ def make_cv_splits_2(df_profiles, n_folds: int = 10, y_columns = None) -> Iterat
     
     for i in idx_list :    
         trn_list = [np.arange(j, j+step_size) for j in idx_list if j != i]
+        print('trn_list', trn_list)
         trn_list = list(chain.from_iterable(trn_list))
+        print('trn_list', trn_list)
         val_list = list(np.arange(i, i+step_size))
         print(f" CV Split {i//step_size} -  Training files: {trn_list}   Validation files: {val_list}  ")
         train = dd.concat([df_profiles[j] for j in trn_list])
-        validation = dd.concat([df_profiles[j] for j in val_list])
         X_train, y_train = split_Xy(train, y_columns)
-        X_test , y_test  = split_Xy(validation, y_columns)
+        if len(val_list) == 0:
+            X_test, y_test = None, None
+        else:
+            validation = dd.concat([df_profiles[j] for j in val_list])
+            X_test , y_test  = split_Xy(validation, y_columns)
         # yield train, validation
         yield (X_train, y_train), (X_test, y_test)
  
@@ -326,14 +376,13 @@ def get_dd_subset(df_ps, skiprows = 0, nrows=10, ss = None, verbose = False):
 
 
 def read_binned_profile_files(file_idxs : set, filename : str = None  ,
-                              names : list = [], usecols : list = [], dtype : dict = {}) -> list :
+                              names : list = [], usecols : list = [], dtype : dict = {}, **kwparms) -> list :
     file_list = []
     filenames = [filename.format(x) for x in file_idxs]
     logging.info(f" Read profiles file ...")
     
     for f in filenames:
-        # bin_file = read_binned_file(filename = training_file, names = names, usecols = usecols, dtype = dtype)
-        bin_file = read_cell_profiles( f , names = names, usecols = usecols, dtype = dtype)
+        bin_file = read_cell_profiles( f , names = names, usecols = usecols, dtype = dtype, **kwparms)
         file_list.append(bin_file)
     
     # df_iter = map(call_read_cell_profiles, training_files)
@@ -341,13 +390,11 @@ def read_binned_profile_files(file_idxs : set, filename : str = None  ,
     logging.info(f" Read profiles file ... complete")
     return file_list
 
-# def read_binned_file(filename, names = None, usecols = None, dtype = None):
-#     print(f" call read_cell_profiles for {filename}")
-#     return read_cell_profiles(filename, names = names, usecols = usecols, dtype = dtype)
-    
-def read_cell_profiles(profile_file, rows = None, header=0, names = None, usecols=None, dtype =None ):
-    print(f" Reading cell profiles file :  {profile_file}")
+
+def read_cell_profiles(profile_file, rows = None, header=0, names = None, usecols=None, dtype =None, **kwparms ):
+    print(f" Reading cell profiles file :  {profile_file}    {kwparms}")
     df_ps = dd.read_csv(profile_file, header=header, names = names, usecols = usecols, dtype = dtype)   
+    # print(f" Number of partitions:  {df_ps.npartitions}   partition(1) shape: {df_ps.get_partition(0).shape}")
     
     # if skiprows is not None:
     #     print(f" Skipping {skiprows} rows")
@@ -364,6 +411,28 @@ def read_cell_profiles(profile_file, rows = None, header=0, names = None, usecol
     print(f" Reading {rows_str}  rows - Number of partitions:  {df_ps.npartitions}   ")
     print()    
     return df_ps
+
+def read_cell_profiles_old(profile_file, rows = None, skiprows = None, index_cols = None):
+    print(f" Reading cell profiles file :  {profile_file}")
+    df_ps = dd.read_csv(profile_file, usecols=Xy_columns, dtype= Xy_columns_dtype)   
+    print(f" Number of partitions:  {df_ps.npartitions}   partition(1) shape: {df_ps.get_partition(0).shape}")
+    
+    if skiprows is not None:
+        print(f" skipping {skiprows} rows")
+        df_ps = df_ps[skiprows:]
+        
+    if rows is not None:
+        print(f" limiting output to {rows} rows")
+        df_ps = df_ps.head(npartitions = df_ps.npartitions, n=rows)        
+        df_ps = dd.from_pandas(df_ps, npartitions = 100)       
+        rows_str = f"{rows}"
+    else:
+        rows_str = "ALL"
+    print()    
+    print(f" Reading {rows_str} rows into {type(df_ps)} shape: {df_ps.shape }")
+    print(f" Number of partitions:  {df_ps.npartitions}   partition(1) shape: {df_ps.get_partition(0).compute().shape}")    
+    return df_ps
+
 
 def disp_trial_info(trial):
     print(f" Best trial:  {trial.number}   Trial state: {trial.state} ")
@@ -406,22 +475,30 @@ def disp_study_history(study):
     print(" *** end of trials *** ")
     print(" Best trials: ", [x.number for x in study.best_trials])    
     
-def propose_parameters(trial):
+def propose_parameters(trial, objective, eval_metric):
+ 
     _params = {
 
         ## --------------------------------------------------------------
         ## General Parameters
         ## --------------------------------------------------------------            
-        "booster"            :  "gbtree",   ## trial.suggest_categorical("booster", ["gbtree", "gblinear", "dart"]),
-        # "device"          : "gpu"
         "verbosity"          : 0,
-        # "n_estimators"     : trial.suggest_int("n_estimators", 75, 125),
+        # "objective"          :  "reg:squarederror",
+        "objective"          :  objective,
+        "eval_metric"        :  eval_metric,
+        
+        "booster"            :  "gbtree",   ## trial.suggest_categorical("booster", ["gbtree", "gblinear", "dart"]),
+
+        ## Device     choices: 'cpu' . . . .
+        # "device"          : "gpu"
         # "validate_parameters" [default: True]
         ## nthread [default to maximum number of threads available if not set]
         ##                   Number of parallel threads used to run XGBoost. When choosing it, please keep thread contention
         ##                  and hyperthreading in mind.
         
         ## disable_default_eval_metric [default= false]  Flag to disable default metric. Set to 1 or true to disable.
+       
+        # "n_estimators"     : trial.suggest_int("n_estimators", 75, 125),
         
         ## --------------------------------------------------------------
         ## Parameters for Tree Booster
@@ -437,7 +514,9 @@ def propose_parameters(trial):
         
         ## eta/learning_rate default =0.3 Step size shrinkage used in update to prevents overfitting. 
         ## After each boosting step, we can directly get the weights of new features, and eta shrinks the feature weights to make the boosting process more conservative.
-        "learning_rate"    : trial.suggest_float("learning_rate", 0.0000001, 1, log=True, step = None),
+
+        "learning_rate"    : trial.suggest_float("learning_rate", 0.01, 10, log=True, step = None),
+        # "learning_rate"    : trial.suggest_float("learning_rate", 0.0000001, 1, log=True, step = None),
 
         
         ## GAMMA / min_split_loss: Default=0. Minimum loss reduction required to make a further partition on a leaf node of the tree. 
@@ -458,7 +537,7 @@ def propose_parameters(trial):
         ##                    The larger min_child_weight is, the more conservative the algorithm will be.
         ##                    range: [0,∞]        
         "min_child_weight"   : trial.suggest_float("min_child_weight", 0, 10),
-
+        
         ## max_delta_step:    [default=0] Maximum delta step we allow each leaf output to be. 
         ##                    If the value is set to 0, it means there is no constraint. If it is set to a positive value, it can help making 
         ##                    the update step more conservative. Usually this parameter is not needed, but it might help in logistic regression 
@@ -473,15 +552,15 @@ def propose_parameters(trial):
         "subsample"         : trial.suggest_float("subsample", 0.4, 1.0),
 
         ## sampling_method:  [default= uniform] The method to use to sample the training instances.
-        ##                   "uniform": each training instance has an equal probability of being selected. Typically set subsample >= 0.5 for good results.
-        ##                   "gradient_based": the selection probability for each training instance is proportional to the regularized absolute value of gradients 
-        ##                   (more specifically, SQRT(g^2 + lambda*h^2). subsample may be set to as low as 0.1 without loss of model accuracy. 
-        ##                   Note that this sampling method is only supported when tree_method is set to hist and the device is cuda; 
-        ##                   other tree methods only support uniform sampling.        
+        ##              "uniform": each training instance has an equal probability of being selected. Typically set subsample >= 0.5 for good results.
+        ##              "gradient_based": the selection probability for each training instance is proportional to the regularized absolute value of gradients 
+        ##              (more specifically, SQRT(g^2 + lambda*h^2). subsample may be set to as low as 0.1 without loss of model accuracy. 
+        ##              Note that this sampling method is only supported when tree_method is set to hist and the device is cuda; 
+        ##              other tree methods only support uniform sampling.        
         "sampling_method"   : "uniform",
         
-        ## note:              All colsample_by* parameters have a range of (0, 1], the default value of 1
-        ##                   and specify the fraction of columns to be subsampled.
+        ## NOTE:  All colsample_by* parameters have a range of (0, 1], the default value of 1
+        ##        and specify the fraction of columns to be subsampled.
         
         ## colsample_bytree;  [default=1] is the subsample ratio of columns when constructing each tree. 
         ##                    Subsampling occurs once for every tree constructed.
@@ -520,6 +599,7 @@ def propose_parameters(trial):
         # updater
         # refresh_leaf [default=1]
         # process_type [default= default]
+        
         # grow_policy [default= depthwise]
         
         # max_leaves [default=0] Maximum number of nodes to be added. Not used by exact tree method.
@@ -602,3 +682,6 @@ def rerun_objective(trial, disp_params = True, save = True):
         model['booster'].save_model(save_as_filename)
     
     # return np.array(metrics['val_auc']).mean(), np.array(metrics['val_logloss']).mean()
+
+
+    

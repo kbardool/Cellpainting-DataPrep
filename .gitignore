@@ -1,3 +1,10 @@
+output_11102023/
+saved_models/
+*.code-workspace
+*.template
+.chembl_ws_client*
+*.tmp
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
