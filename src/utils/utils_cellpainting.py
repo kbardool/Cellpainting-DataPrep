@@ -7,9 +7,17 @@ import dask
 import dask.array as da
 import dask.dataframe as dd
 import dask_ml.model_selection as dcv
+from matplotlib import pyplot as plt
 import sklearn.metrics as skm
-import scipy.stats as sps 
+import sklearn.utils.random as skr
+import scipy.stats as sps
 from optuna.trial import TrialState
+import torch
+import torch.nn as nn
+
+logger = logging.getLogger(__name__) 
+
+
 
 def setup_datafiles():
     pass
@@ -21,7 +29,7 @@ def setup_logging(level="INFO"):
     FORMAT = '%(asctime)s - %(levelname)s: - %(message)s'
     logging.basicConfig(level="INFO", format= FORMAT)
     logging.getLogger("imported_module").setLevel(logging.CRITICAL)
-    
+
 ##-------------------------------------------------------------------------------------
 ## Load Profiles Program (3)
 ##-------------------------------------------------------------------------------------
@@ -254,12 +262,18 @@ def compute_classification_metrics(model, y_true, y_pred, top_k =3, mode = 'trai
         metrics['val_auc']     = model['history']['test']['auc'][-1]
         metrics['val_logloss'] = model['history']['test']['logloss'][-1]
     else:
-        evals_result = model.evals_result()
-        metrics['train_auc'] = evals_result['validation_0']['auc'][-1]
-        metrics['train_logloss'] = evals_result['validation_0']['logloss'][-1]
-        metrics['val_auc']  = evals_result['validation_1']['auc'][-1]
-        metrics['val_logloss'] = evals_result['validation_0']['logloss'][-1]
-        
+        if hasattr(model, "evals_result"):
+            ev_result = model.evals_result()
+            metrics['train_auc'] = ev_result['validation_0']['auc'][-1]
+            metrics['train_logloss'] = ev_result['validation_0']['logloss'][-1]
+            metrics['val_auc']  = ev_result['validation_1']['auc'][-1]
+            metrics['val_logloss'] = ev_result['validation_0']['logloss'][-1]
+        else:
+            metrics['train_auc'] = 0.0
+            metrics['train_logloss'] = 0.0
+            metrics['val_auc']  = 0.0
+            metrics['val_logloss'] = 0.0
+            
     metrics['roc_auc']   = skm.roc_auc_score(y_true, y_score = y_pred)
     metrics['logloss']   = skm.log_loss(y_true, y_pred= y_pred)
     
@@ -268,6 +282,7 @@ def compute_classification_metrics(model, y_true, y_pred, top_k =3, mode = 'trai
     
     metrics['top_k_acc'] = skm.top_k_accuracy_score(y_true, y_score = y_pred, k=top_k)
     metrics['F1_score']  = skm.f1_score(y_true, y_pred = (y_pred >= 0.5))
+ 
     
     metrics['map']       = skm.average_precision_score(y_true, y_pred)
     metrics['pearson_corr'], pearson_p = sps.pearsonr(y_true, y_pred)
@@ -323,9 +338,7 @@ def make_cv_splits_2(df_profiles, n_folds: int = 10, y_columns = None) -> Iterat
         trn_list = [np.arange(j, j+step_size) for j in idx_list if j != i]
         val_list = list(np.arange(i, i+step_size))
         trn_list = list(chain.from_iterable(trn_list))
-        print('trn_list', trn_list)
-        print('val_list', val_list)
-        print(f" CV Split {i//step_size} -  Training files: {trn_list}   Validation files: {val_list}  ")
+        print(f"CV Split {i//step_size} -  Training files: {trn_list}   Validation files: {val_list}  ")
         train = dd.concat([df_profiles[j] for j in trn_list])
         X_train, y_train = split_Xy(train, y_columns)
         if len(val_list) == 0:
@@ -455,32 +468,34 @@ def disp_trial_info(trial):
     print()
     print(f" Trial results: {trial.values}")
     print('\n')
-  
 
-def disp_study_history(study):
+
+def disp_study_history(study, best_only = False):
     print(f" {study.study_name}  study history\n")
-
+    print(f" Total trials in study: {len(study.trials)}")
+    best_trials = [x.number for x in study.best_trials]
+    print(f" Best trials: {best_trials}" )    
     print(f"                start     -   completion      status        validation metrics")
     print(f" trial#         time      -      time          code      {study.metric_names[0]}        {study.metric_names[1]}")
     print("-"*80)
     for st in study.trials:
-        dt_start = st.datetime_start.strftime('%Y-%m-%d   %H:%M:%S') if st.datetime_start is not None else '-- n/a --' 
-        dt_end   = st.datetime_complete.strftime('%H:%M:%S') if st.datetime_complete is not None else ' -n/a- ' 
-        print(f"Trial #: {st.number:<4d} {dt_start:^21s} - {dt_end:^8s}  {st.state:3d}  ", end="")
-        if st.state == TrialState.COMPLETE:
-            print(f" {st.values[0]:10.5f}   {st.values[1]:12.5f}    {st.user_attrs.get('memo', '')}")
-        elif st.state == TrialState.RUNNING:
-            print(f"        *** RUNNING ***       {st.user_attrs.get('memo', '')}")            
-        elif st.state == TrialState.PRUNED:
-            print(f"        *** PRUNED ***        {st.user_attrs.get('memo', '')}")
-        elif st.state == TrialState.FAIL:
-            print(f"        *** FAILED ***        {st.user_attrs.get('memo', '')}")
-        elif st.state == TrialState.WAITING:
-            print(f"        *** WAITING ***       {st.user_attrs.get('memo', '')}")            
-        else:
-            print("\n")
+        if  (not best_only) or (best_only and st.number in best_trials):
+            dt_start = st.datetime_start.strftime('%Y-%m-%d   %H:%M:%S') if st.datetime_start is not None else '-- n/a --' 
+            dt_end   = st.datetime_complete.strftime('%H:%M:%S') if st.datetime_complete is not None else ' -n/a- ' 
+            print(f"Trial #: {st.number:<4d} {dt_start:^21s} - {dt_end:^8s}  {st.state:3d}  ", end="")
+            if st.state == TrialState.COMPLETE:
+                print(f" {st.values[0]:10.5f}   {st.values[1]:12.5f}    {st.user_attrs.get('memo', '')}")
+            elif st.state == TrialState.RUNNING:
+                print(f"        *** RUNNING ***       {st.user_attrs.get('memo', '')}")            
+            elif st.state == TrialState.PRUNED:
+                print(f"        *** PRUNED ***        {st.user_attrs.get('memo', '')}")
+            elif st.state == TrialState.FAIL:
+                print(f"        *** FAILED ***        {st.user_attrs.get('memo', '')}")
+            elif st.state == TrialState.WAITING:
+                print(f"        *** WAITING ***       {st.user_attrs.get('memo', '')}")            
+            else:
+                print("\n")
     print(" *** end of trials *** ")
-    print(" Best trials: ", [x.number for x in study.best_trials])    
     
 def propose_parameters(trial, objective, eval_metric):
  
@@ -691,4 +706,278 @@ def rerun_objective(trial, disp_params = True, save = True):
     # return np.array(metrics['val_auc']).mean(), np.array(metrics['val_logloss']).mean()
 
 
+def balance_datasets(X,y, ratio = 2, verbose = False):
+    y = y.astype(np.uint8)
+    neg_idxs = np.nonzero([y == 0])[1]
+    pos_idxs = np.nonzero([y == 1])[1]
+    pos_idxs = np.array(pos_idxs)
+    # print(f"\n # Pos rows: {len(pos_idxs)}   # Neg rows: {len(neg_idxs)}  Total: {len(pos_idxs)+ len(neg_idxs)}")
+    # print(f" # Pos compounds: {len(pos_idxs)//3}   # Neg compounds: {len(neg_idxs)//3}  total: {(len(pos_idxs) + len(neg_idxs))//3}")
+    # print(f"\n pos indexes - len: {len(pos_idxs)}")
+    # print( pos_idxs[:50])
+    # print( pos_idxs[-50:])
+    # print(f"\n neg indexes - len: {len(neg_idxs)}")
+    # print(neg_idxs[:50])
+    # print(neg_idxs[-50:])
     
+    stepped_pos_idxs = [x for x in pos_idxs if x % 3 == 0]
+    stepped_neg_idxs = [x for x in neg_idxs if x % 3 == 0]
+    stepped_neg_idxs = np.array(stepped_neg_idxs)
+    pos_counts = len(stepped_pos_idxs)
+    neg_counts = len(stepped_neg_idxs)
+    
+    if verbose:
+        print(f"\n # Pos counts: {pos_counts}    # Neg counts: {neg_counts}   Total: {pos_counts+neg_counts}")
+        print(f"\n pos indexes - len: {pos_counts}")
+        print(stepped_pos_idxs[:25])
+        print(stepped_pos_idxs[-25:])
+        print(f"\n neg indexes - len: {neg_counts}")
+        print(stepped_neg_idxs[:25])
+        print(stepped_neg_idxs[-25:])
+        print()
+    num_neg_samples = ratio * pos_counts
+    
+    print(f"\n Take {pos_counts} samples from total of {pos_counts} postive training samples")
+    print(f" Take {num_neg_samples} samples from total of {neg_counts} negative training samples")
+    sample_idxs = skr.sample_without_replacement(n_population=neg_counts, n_samples= num_neg_samples, )
+    sample_idxs.sort()
+    neg_sample_idxs = stepped_neg_idxs[sample_idxs]
+    if verbose:
+        print(f"\n Sample indxs - len: {len(sample_idxs)}")
+        print(f" {sample_idxs[:20]}")
+        print(f" {sample_idxs[-20:]}")
+        print(f"\n neg_sample_idxs: {len(neg_sample_idxs)}")
+        print(f"{neg_sample_idxs[:20]}")
+        print(f"{neg_sample_idxs[-20:]}")
+        print()
+        print(neg_sample_idxs[:20])
+        print(neg_sample_idxs[:20]+1)
+        print(neg_sample_idxs[:20]+2)
+    
+    neg_sample_idxs_3 = np.concatenate((neg_sample_idxs, neg_sample_idxs+1, neg_sample_idxs+2))
+    neg_sample_idxs_3.sort()
+    if verbose:
+        print(f"\n pos_sample_idxs_3: {len(pos_idxs)}")
+        print(f" [:20] :{pos_idxs[:20]}")
+        print(f" [-20:] {pos_idxs[-20:]}")
+        print(f"\n neg_sample_idxs_3: {len(neg_sample_idxs_3)}")
+        print(f" [:20] :{neg_sample_idxs_3[:20]}")
+        print(f" [-20:] {neg_sample_idxs_3[-20:]}")
+    
+    balanced_ds_idxs = np.concatenate((pos_idxs, neg_sample_idxs_3))
+
+    bal_X = X[balanced_ds_idxs]
+    bal_y = y[balanced_ds_idxs]
+
+    print(f"\n Balanced Dataset: # pos samples: {len(pos_idxs)}    # Neg samples: {len(neg_sample_idxs_3)}  Total len: {len(balanced_ds_idxs)}")   
+    print(f"\n X :  Min: {bal_X.min():.4f}    Max: {bal_X.max():.4f}   Mean: {bal_X.mean():.4f}  Std: {bal_X.std():.4f}")
+    print(f" y :  Min: {bal_y.min():.4f}    Max: {bal_y.max():.4f}   Mean: {bal_y.mean():.4f}  Std: {bal_y.std():.4f}")
+    return bal_X,bal_y
+
+
+
+def label_counts(input_list = None, title = None, label = None):
+    if input_list is None:
+        input_list = [(title, label)]
+
+    for (ttl, lbl) in input_list:
+        bcnt = np.bincount(lbl.astype(np.int64))
+        bcnt_sum = bcnt.sum()
+        print(f" {ttl}")
+        print('','-'*(len(ttl)+1))
+        print(f" Total samples: {bcnt_sum}  - compounds: {bcnt_sum//3}")
+        print(f" Label 0: {bcnt[0]:7,d}      % {bcnt[0]*100/bcnt_sum:2.2f} ")
+        print(f" Label 1: {bcnt[1]:7,d}      % {bcnt[1]*100/bcnt_sum:2.2f} ")
+        print("")
+        
+def compute_metrics(true, pred, title = 'Classification Metrics'):
+    test_accuracy = skm.accuracy_score(true, pred)
+    # precision : tp / (tp+fp)
+    precision, recall, f1, support = skm.precision_recall_fscore_support(true, pred, average='binary', zero_division=0)
+    label_count = len(true)
+    print(f" {title}")
+    print('-'*(len(title)+2))
+    print(f" Accuracy: {test_accuracy:.5f}     Precision: {precision:.5f}     Recall: {recall:.5f}     F1: {f1:.5f} \n"
+          f"\n True + labels:        {true.sum():6.0f}     ratio to total:  {true.sum()/label_count:.5f}"
+          f"\n Predicted + labels:   {pred.sum():6d}     ratio to total:  {pred.sum()/label_count:.5f}"
+          f"\n True/Predicted Match: {(pred == true).sum():6d}     ratio to total:  {(pred==true).sum()/label_count:.5f}" )
+
+def plots_from_estimator(estim, X, y):
+    rows = 1
+    cols = 3
+    fig, axs = plt.subplots(1, cols, sharey=False, tight_layout=True, figsize=(cols *5,5))
+    _ = skm.PrecisionRecallDisplay.from_estimator(estim, X, y, plot_chance_level = True, ax = axs[0])
+    _ = skm.RocCurveDisplay.from_estimator(estim, X, y, plot_chance_level= True, ax = axs[1])
+    _ = skm.ConfusionMatrixDisplay.from_estimator(estim, X, y, ax = axs[2])
+    _ = axs[0].set_title(" Precision / Recall ")
+    _ = axs[1].set_title(" ROC Curve ")
+    plt.show()
+
+def plots_from_predictions(true, pred):
+    rows = 1
+    cols = 3
+    fig, axs = plt.subplots(1, cols, sharey=False, tight_layout=True, figsize=(cols *5,5) )
+    _ = skm.PrecisionRecallDisplay.from_predictions(true, pred, plot_chance_level = True, ax = axs[0])
+    _ = skm.RocCurveDisplay.from_predictions(true, pred, plot_chance_level= True, ax = axs[1])
+    _ = skm.ConfusionMatrixDisplay.from_predictions(true, pred, ax = axs[2], values_format='d')
+    _ = axs[0].set_title(" Precision / Recall ")
+    _ = axs[1].set_title(" ROC Curve ")
+    plt.show()
+
+def plot_cls_metrics(y_true, y_prob, y_pred, epochs = None ):
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    msg_sfx = f"- epoch:{epochs} " if epochs is not None else ""
+    roc_display = skm.RocCurveDisplay.from_predictions(
+        y_true.squeeze(),
+        y_prob.squeeze(), 
+        name=f"ROC Curve",
+        color="darkorange",
+        plot_chance_level=True,
+        ax = axes[0])
+
+    _ = roc_display.ax_.set(
+        xlabel="False Positive Rate",
+        ylabel="True Positive Rate",
+        title = f" ROC curve {msg_sfx}")
+        # title=f"ROC curve - TPSA Classification  \n LogLoss: {metrics['logloss'] :0.3f} AUC: {metrics['roc_auc']:0.3f} ",
+    _ = roc_display.ax_.legend(fontsize=8)
+
+    pr_display = skm.PrecisionRecallDisplay.from_predictions(
+        y_true.squeeze(),
+        y_prob.squeeze(),
+        name="Precision/Recall",
+        pos_label= 1,
+        plot_chance_level=True,
+        ax = axes[1])
+
+    _ = pr_display.ax_.set_title(f" Precision-Recall curve {msg_sfx}")
+    _ = pr_display.ax_.legend(fontsize=8)
+
+
+    cm_display = skm.ConfusionMatrixDisplay.from_predictions(
+        y_true.squeeze(),
+        y_pred.squeeze(),
+        values_format="5d",
+        ax = axes[2])
+
+    _ = cm_display.ax_.set_title(f"Confusion Matrix {msg_sfx}")
+
+def save_checkpoint(epoch, model, optimizer = None, scheduler = None, 
+                    filename = None, ckpt_path = "ckpts",
+                    update_latest=False, update_best=False, 
+                    verbose = False):
+    
+    from types import NoneType
+    model_checkpoints_folder = os.path.join(ckpt_path)
+    if not os.path.exists(model_checkpoints_folder):
+        print(f"path {model_checkpoints_folder} doesn't exist")
+        raise Exception(f"path {model_checkpoints_folder} doesn't exist") 
+        
+    checkpoint = {'epoch'      : epoch,
+                  'params'     : dict()
+                 }
+    if isinstance(model, nn.modules.container.Sequential): 
+        checkpoint['model'] =  model
+        checkpoint['optimizer'] =  optimizer.state_dict()
+        checkpoint['scheduler'] =  scheduler.state_dict()
+        
+    ## save model attributes 
+    model_attributes = model.__dict__
+    for key, value in model_attributes.items():
+        if key not in checkpoint:
+            if key[0] == '_' :
+                pass
+                # if verbose:
+                    # print(f"{key:40s}, {str(type(value)):60s} -- {key} in ignore_attributes - will not be added")
+            else:
+                if verbose:
+                    print(f"{key:40s}, {str(type(value)):60s} -- add to checkpoint dict")
+                checkpoint['params'][key] = value
+        else:
+            if verbose:
+                print(f"{key:40s}, {str(type(value)):60s} -- {key} already in checkpoint dict")
+    if verbose:
+        print(checkpoint.keys())    
+    
+    # if filename is None: 
+    #     filename = f"{model.name}_{args.runmode[:4]}_{args.exp_title}_{args.exp_date}"      
+    #     if update_latest:
+    #         s_filename = f"LAST_ep_{epoch:03d}"
+    #     elif update_best:
+    #         s_filename = f"BEST"
+    #     else:
+    #         s_filename = f"ep_{epoch:03d}"
+    #     filename = f"{filename}_{s_filename}"
+    if filename[-3:] != ".pt":
+        filename += ".pt"
+
+    torch.save(checkpoint, os.path.join(model_checkpoints_folder, filename)) 
+    logger.info(f" Model exported to {filename} - epoch: {epoch}")
+
+
+def load_checkpoint_v5(model, optimizer = None, scheduler = None,
+                       filename = None, ckpt_path = "ckpts",
+                       dryrun = False, 
+                       verbose=False):
+
+    if filename[-3:] != '.pt':
+        filename+='.pt'
+
+    logging.info(f" Load model checkpoint from  {filename}")    
+    ckpt_file = os.path.join(ckpt_path, filename)
+    
+    try:
+        checkpoint = torch.load(ckpt_file)
+    except FileNotFoundError:
+        Exception("Previous state checkpoint not found.")
+        print("FileNotFound Exception")
+    except :
+        print("Other Exception")
+        print(sys.exc_info())
+
+    epoch = checkpoint.get('epoch',-1)
+    logger.info(f" ==> Loading from checkpoint {filename} successfully. last epoch on checkpoint: {epoch}")
+    
+    if dryrun:
+        for key, value in checkpoint['params'].items():
+            logging.info(f"{key:40s}, {str(type(value)):60s}  -- model attr set")
+        # model.load_state_dict(checkpoint['state_dict'])
+    else:
+        model = checkpoint['model']
+        if optimizer is not None:
+            optimizer = checkpoint['optimizer']
+        if scheduler is not None:
+            scheduler = checkpoint['scheduler']
+        
+    if verbose:
+        for key, value in checkpoint.items():
+            logging.info(f"{key:40s}, {str(type(value)):60s} ")
+        for k in ['trn', 'val']:
+            print(k)
+            for kk,vv in model.training_history[k].items():
+                print(f" {k}-{kk}   checkpoint len: {len(vv)} ")        
+        print(f"model :\n {checkpoint['model']}\n")
+        
+        # for k,v in model.named_parameters():
+        #     if v.requires_grad == False:
+        #         v.requires_grad_()
+        #         print(f" set {k} to requires_grad = True {v.requires_grad}")
+        # display_model_hyperparameters(model, ' Loaded hyperparameters ')
+        # display_model_parameters(model, 'loaded named parameters')
+
+        # for k,v in checkpoint['optimizers_state_dict'].items():
+        #     model.optimizers[k].load_state_dict(v)
+        #     if verbose:
+        #         print(f"optimizer state dict:\n {v['param_groups']}")
+
+        # for k,v in checkpoint['schedulers_state_dict'].items():
+        #     model.schedulers[k].load_state_dict(v)
+        #     if verbose:
+        #         print(f"scheduler state dict:\n  {v}")           
+
+    logger.info(f" ==> Loaded from checkpoint {filename} successfully. last epoch on checkpoint: {epoch}")
+    logger.info(f" Model best training metric   : {model.trn_best_metric:6f} - epoch: {model.trn_best_epoch}") 
+    logger.info(f" Model best validation metric : {model.val_best_metric:6f} - epoch: {model.val_best_epoch}") 
+
+    return model, epoch 
+
