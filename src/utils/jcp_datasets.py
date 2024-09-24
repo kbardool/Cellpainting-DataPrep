@@ -60,9 +60,9 @@ def project_datasets(metadata_path = './metadata/', input_path='./input/', outpu
     ds.CompoundExtendedMetadata3SampleFile      = f"{output_path}{prefix_lc}compound_extended_metadata_3samples.csv"
     ds.CompoundExtendedMetadata2SampleFile      = f"{output_path}{prefix_lc}compound_extended_metadata_2samples.csv"
 
-    CompoundProfiles2SampleFile         = f"{output_path}{prefix_lc}/2_sample_profiles/2sample_profiles_{{0:03d}}{{1:s}}.csv"
-    CompoundProfiles3SampleFile         = f"{output_path}{prefix_lc}/3_sample_profiles/3sample_profiles_{{0:03d}}{{1:s}}.csv"
-    CompoundProfiles5SampleFile         = f"{output_path}{prefix_lc}/5_sample_profiles/5sample_profiles_{{0:03d}}{{1:s}}.csv"
+    ds.CompoundProfiles2SampleFile         = f"{output_path}{prefix_lc}/2_sample_profiles/2sample_profiles_{{0:03d}}{{1:s}}.csv"
+    ds.CompoundProfiles3SampleFile         = f"{output_path}{prefix_lc}/3_sample_profiles/3sample_profiles_{{0:03d}}{{1:s}}.csv"
+    ds.CompoundProfiles5SampleFile         = f"{output_path}{prefix_lc}/5_sample_profiles/5sample_profiles_{{0:03d}}{{1:s}}.csv"
 
     ## gz, bz2, zip, tar, tar.gz, tar.bz2
     # types = ['.gz', '.bz2','.zip', '.tar', '.tar.gz', '.tar.bz2']
