@@ -14,7 +14,6 @@ import scipy.stats as sps
 from optuna.trial import TrialState
 import torch
 import torch.nn as nn
-
 logger = logging.getLogger(__name__) 
 
 
@@ -866,21 +865,22 @@ def save_checkpoint(epoch, model, optimizer = None, scheduler = None,
                     filename = None, ckpt_path = "ckpts",
                     update_latest=False, update_best=False, 
                     verbose = False):
-    
+    """simplified version of save_checkpoint_v5 from utils_ptsnnl"""
+    import torch.nn as nn
     from types import NoneType
     model_checkpoints_folder = os.path.join(ckpt_path)
     if not os.path.exists(model_checkpoints_folder):
         print(f"path {model_checkpoints_folder} doesn't exist")
         raise Exception(f"path {model_checkpoints_folder} doesn't exist") 
-        
+
     checkpoint = {'epoch'      : epoch,
                   'params'     : dict()
                  }
-    if isinstance(model, nn.modules.container.Sequential): 
-        checkpoint['model'] =  model
-        checkpoint['optimizer'] =  optimizer.state_dict()
-        checkpoint['scheduler'] =  scheduler.state_dict()
-        
+    if isinstance(model, nn.modules.container.Sequential):
+        checkpoint['model'] = model
+        checkpoint['optimizer'] = optimizer.state_dict()
+        checkpoint['scheduler'] = scheduler.state_dict()
+
     ## save model attributes 
     model_attributes = model.__dict__
     for key, value in model_attributes.items():
@@ -888,7 +888,7 @@ def save_checkpoint(epoch, model, optimizer = None, scheduler = None,
             if key[0] == '_' :
                 pass
                 # if verbose:
-                    # print(f"{key:40s}, {str(type(value)):60s} -- {key} in ignore_attributes - will not be added")
+                #     print(f"{key:40s}, {str(type(value)):60s} -- {key} in ignore_attributes - will not be added")
             else:
                 if verbose:
                     print(f"{key:40s}, {str(type(value)):60s} -- add to checkpoint dict")
@@ -897,10 +897,10 @@ def save_checkpoint(epoch, model, optimizer = None, scheduler = None,
             if verbose:
                 print(f"{key:40s}, {str(type(value)):60s} -- {key} already in checkpoint dict")
     if verbose:
-        print(checkpoint.keys())    
-    
+        print(checkpoint.keys())
+
     # if filename is None: 
-    #     filename = f"{model.name}_{args.runmode[:4]}_{args.exp_title}_{args.exp_date}"      
+    #     filename = f"{model.name}_{args.runmode[:4]}_{args.exp_title}_{args.exp_date}"
     #     if update_latest:
     #         s_filename = f"LAST_ep_{epoch:03d}"
     #     elif update_best:
@@ -915,29 +915,29 @@ def save_checkpoint(epoch, model, optimizer = None, scheduler = None,
     logger.info(f" Model exported to {filename} - epoch: {epoch}")
 
 
-def load_checkpoint_v5(model, optimizer = None, scheduler = None,
-                       filename = None, ckpt_path = "ckpts",
-                       dryrun = False, 
-                       verbose=False):
+def load_checkpoint(model, optimizer = None, scheduler = None,
+                    filename = None, ckpt_path = "ckpts",
+                    dryrun = False,
+                    verbose=False):
 
     if filename[-3:] != '.pt':
-        filename+='.pt'
-
-    logging.info(f" Load model checkpoint from  {filename}")    
+        filename += '.pt'
+    if verbose:
+        logging.info(f" Load model checkpoint from  {filename}")
     ckpt_file = os.path.join(ckpt_path, filename)
-    
+
     try:
         checkpoint = torch.load(ckpt_file)
     except FileNotFoundError:
         Exception("Previous state checkpoint not found.")
-        print("FileNotFound Exception")
-    except :
+        print(f"FileNotFound Exception - {filename}")
+    except Exception as e :
         print("Other Exception")
         print(sys.exc_info())
 
     epoch = checkpoint.get('epoch',-1)
-    logger.info(f" ==> Loading from checkpoint {filename} successfully. last epoch on checkpoint: {epoch}")
-    
+    # logger.info(f" ==> Loading from checkpoint {filename} successfully. last epoch on checkpoint: {epoch}")
+
     if dryrun:
         for key, value in checkpoint['params'].items():
             logging.info(f"{key:40s}, {str(type(value)):60s}  -- model attr set")
@@ -945,19 +945,22 @@ def load_checkpoint_v5(model, optimizer = None, scheduler = None,
     else:
         model = checkpoint['model']
         if optimizer is not None:
-            optimizer = checkpoint['optimizer']
+            # print(checkpoint['optimizer'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
         if scheduler is not None:
-            scheduler = checkpoint['scheduler']
-        
+            # print(checkpoint['scheduler'])
+            scheduler.load_state_dict(checkpoint['scheduler'])
+
     if verbose:
         for key, value in checkpoint.items():
             logging.info(f"{key:40s}, {str(type(value)):60s} ")
-        for k in ['trn', 'val']:
-            print(k)
-            for kk,vv in model.training_history[k].items():
-                print(f" {k}-{kk}   checkpoint len: {len(vv)} ")        
+        if hasattr(model, 'training_history'):
+            for k in ['trn', 'val']:
+                print(k)
+                for kk,vv in model.training_history[k].items():
+                    print(f" {k}-{kk}   checkpoint len: {len(vv)} ")
         print(f"model :\n {checkpoint['model']}\n")
-        
+
         # for k,v in model.named_parameters():
         #     if v.requires_grad == False:
         #         v.requires_grad_()
@@ -965,19 +968,21 @@ def load_checkpoint_v5(model, optimizer = None, scheduler = None,
         # display_model_hyperparameters(model, ' Loaded hyperparameters ')
         # display_model_parameters(model, 'loaded named parameters')
 
-        # for k,v in checkpoint['optimizers_state_dict'].items():
-        #     model.optimizers[k].load_state_dict(v)
+        # for k,v in checkpoint['optimizer'].items():
+            # optimizer.load_state_dict(v)
+            # if verbose:
+                # print(f"optimizer state dict:\n {v['param_groups']}")
+
+        # for k,v in checkpoint['scheduler'].items():
+        # scheduler.load_state_dict(v)
         #     if verbose:
-        #         print(f"optimizer state dict:\n {v['param_groups']}")
+        #         print(f"scheduler state dict:\n  {v}")
+    if verbose:
+        logger.info(f" ==> Loaded from checkpoint {filename} successfully. last epoch on checkpoint: {epoch}")
+    if hasattr(model,' trn_best_metric'):
+        logger.info(f" Model best training metric   : {model.trn_best_metric:6f} - epoch: {model.trn_best_epoch}") 
+    if hasattr(model, 'val_best_metric'):
+        logger.info(f" Model best validation metric : {model.val_best_metric:6f} - epoch: {model.val_best_epoch}") 
 
-        # for k,v in checkpoint['schedulers_state_dict'].items():
-        #     model.schedulers[k].load_state_dict(v)
-        #     if verbose:
-        #         print(f"scheduler state dict:\n  {v}")           
-
-    logger.info(f" ==> Loaded from checkpoint {filename} successfully. last epoch on checkpoint: {epoch}")
-    logger.info(f" Model best training metric   : {model.trn_best_metric:6f} - epoch: {model.trn_best_epoch}") 
-    logger.info(f" Model best validation metric : {model.val_best_metric:6f} - epoch: {model.val_best_epoch}") 
-
-    return model, epoch 
+    return model, optimizer, scheduler, epoch
 

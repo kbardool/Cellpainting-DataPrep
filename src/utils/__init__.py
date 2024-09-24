@@ -3,6 +3,7 @@
 # from .version import __version__
 
 from .utils_cellpainting import * 
+from utils.jcp_datasets import project_datasets
 # from .sparsechem_utils import censored_mse_loss, censored_mae_loss,  aggregate_results, compute_metrics,   \
 #                               load_sparse, load_task_weights, class_fold_counts, fold_and_transform_inputs, \
 #                               print_metrics_cr
@@ -19,5 +20,3 @@ from .utils_cellpainting import *
 #                                model_fix_weights, disp_dataloader_info, disp_training_parms, 
 #                                warmup_phase, weight_policy_training, 
 #                                init_dataloaders_by_fold_id, init_test_dataloader)
-
-from utils.jcp_datasets import project_datasets

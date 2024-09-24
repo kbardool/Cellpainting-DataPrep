@@ -12,24 +12,24 @@ class CellpaintingDataset(torch.utils.data.IterableDataset ):
 
     def __init__(self, 
                  type : str = None,
-                 training_path : str = None, 
-                 validation_path : str = None, 
-                 test_path : str = None, 
+                 training_path : str = None,
+                 validation_path : str = None,
+                 test_path : str = None,
                  batch_size: int = None,
-                 sample_size : int = None, 
-                 rows_per_batch :int  = None, 
-                 conversions : Dict = None, 
-                 train_start :int = None, 
-                 train_end :int = None,
-                 val_start :int = None, 
-                 val_end :int = None,
-                 test_start :int = None, 
-                 test_end :int = None,
-                 names : List = None, 
-                 usecols : List = None, 
-                 iterator : bool =False, 
+                 sample_size : int = None,
+                 rows_per_batch : int  = None,
+                 conversions : Dict = None,
+                 train_start : int = None,
+                 train_end : int = None,
+                 val_start : int = None,
+                 val_end : int = None,
+                 test_start : int = None,
+                 test_end : int = None,
+                 names : List = None,
+                 usecols : List = None,
+                 iterator : bool = True,
                  verbose : bool = False,
-                 compounds_per_batch: int = 1,
+                 compounds_per_batch : int = 1,
                  **misc ):
         # print("Cellpainting __init__ routine", flush=True)
         # Store the filename in object's memory
@@ -50,15 +50,15 @@ class CellpaintingDataset(torch.utils.data.IterableDataset ):
 
         if self.type == 'train': 
             self.filename = training_path
-            self.start = train_start 
+            self.start = train_start
             self.end = train_end
-        elif self.type == 'val': 
+        elif self.type == 'val':
             self.filename = validation_path
-            self.start =  val_start
+            self.start = val_start
             self.end = val_end
         else: 
             self.filename = test_path 
-            self.start =  test_start
+            self.start = test_start
             self.end = test_end
         self.numrows = self.end-self.start
 
@@ -66,7 +66,7 @@ class CellpaintingDataset(torch.utils.data.IterableDataset ):
         smp_sz = self.sample_size
         cpb_sz = self.compounds_per_batch
         bth_sz = self.batch_size
-        recs_per_batch = smp_sz * bth_sz * cpb_sz        
+        recs_per_batch = smp_sz * bth_sz * cpb_sz
         bth_per_epoch = file_sz // recs_per_batch
         logger.info(f" Building CellPantingDataset for {self.type}")
         logger.info(f" filename:  {self.filename}")
@@ -78,7 +78,7 @@ class CellpaintingDataset(torch.utils.data.IterableDataset ):
         logger.info(f" batch_size  :  {self.batch_size}")
         logger.info(f" sample_size :  {self.sample_size}")
         logger.info(f" compounds_per_batch :  {self.compounds_per_batch}")
-        logger.info(f" chunksize  (rows per minibatch) :  {self.rows_per_batch}")
+        logger.info(f" rows per batch (chunksize) :  {self.rows_per_batch}")
         logger.info(f" Each mini-batch contains {recs_per_batch/smp_sz} compounds with {smp_sz} samples per compound : total {recs_per_batch} rows")
         logger.info(f" Number of {recs_per_batch} row full size batches per epoch: {bth_per_epoch}")
         logger.info(f" Rows covered by {bth_per_epoch} full size batches ({recs_per_batch} rows) per epoch:  {(file_sz // recs_per_batch) * recs_per_batch}")
@@ -111,16 +111,15 @@ class CellpaintingDataset(torch.utils.data.IterableDataset ):
     def __iter__(self):
         # Create an iterator
         # print("Cellpainting __iter__ routine", flush=True)
-        self.file_iterator =  pd.read_csv(self.filename, 
-                                names = self.names,
-                                header = 0,
-                                skiprows = self.start,
-                                nrows = self.numrows,
-                                dtype = self.dtype,
-                                usecols = self.usecols,
-                                iterator = self.iterator,
-                                chunksize = self.rows_per_batch,
-                                )
+        self.file_iterator = pd.read_csv(self.filename,
+                                         names = self.names,
+                                         header = 0,
+                                         skiprows = self.start,
+                                         nrows = self.numrows,
+                                         dtype = self.dtype,
+                                         usecols = self.usecols,
+                                         iterator = self.iterator,
+                                         chunksize = self.rows_per_batch,)
         # print(type(self.file_iterator), self.numrows, self.chunksize)
         # df_ps = dd.read_csv(profile_file, header=header, names = names, usecols = usecols, dtype = dtype) 
         # Map each element using the line_mapper
