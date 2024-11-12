@@ -1,12 +1,13 @@
-import os 
-import logging 
+import os
+import sys
+import logging
 from collections.abc import Iterator
 import numpy as np
 import pandas as pd
 import dask
 import dask.array as da
 import dask.dataframe as dd
-import dask_ml.model_selection as dcv
+# import dask_ml.model_selection as dcv
 from matplotlib import pyplot as plt
 import sklearn.metrics as skm
 import sklearn.utils.random as skr
@@ -14,24 +15,25 @@ import scipy.stats as sps
 from optuna.trial import TrialState
 import torch
 import torch.nn as nn
+
+
+# Exhaustive search over specified parameter values for an estimator.
+# Randomized search on hyper parameters.
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+
+
 logger = logging.getLogger(__name__) 
-
-
 
 def setup_datafiles():
     pass
     return 
-    
-    
+
 def setup_logging(level="INFO"):
     logLevel = os.environ.get('LOG_LEVEL', 'INFO').upper()
     FORMAT = '%(asctime)s - %(levelname)s: - %(message)s'
     logging.basicConfig(level="INFO", format= FORMAT)
     logging.getLogger("imported_module").setLevel(logging.CRITICAL)
 
-##-------------------------------------------------------------------------------------
-## Load Profiles Program (3)
-##-------------------------------------------------------------------------------------
 
 def read_profiles_from_s3(sample_set, s3_path):
     for i, row in sample_set.iterrows():
@@ -53,9 +55,10 @@ def read_profiles_from_local(root_folder, keys, source, columns):
     Metadata_Source, Metadata_Batch, Metadata_Plate = keys
     source_path = source.format(root_folder, Metadata_Source, Metadata_Batch, Metadata_Plate)
     df = pd.read_parquet(source_path, columns=columns)
-    
+
     # print(len(df.columns.to_list()))
     return df
+
 
 def cat_columns(column_list = None):
     from collections import defaultdict
@@ -76,9 +79,9 @@ def cat_columns(column_list = None):
     key_len = [len(x) for x in keys]
     ttls = defaultdict(int)  ## {'Cells': 0, 'Cytoplasm': 0 , 'Nuclei' : 0, 'Metadata': 0, 'Other': 0}
     cols = defaultdict(list)
-    
+
     for i in column_list:
-        for j  in range(len(keys)):
+        for j in range(len(keys)):
             if i[:key_len[j]] == keys[j]:
                 # print(f" found   {j}  - {keys[j]}  {key_len[j]}    {i[:key_len[j]]}")
                 ttls[keys[j]] += 1
@@ -95,6 +98,7 @@ def cat_columns(column_list = None):
     print(f"\t\t\t\t  total: {ttl_count:5d}")
     return cols
 
+
 def get_cols_like(col_list, pattern = None):
     import re
     if not isinstance(pattern, list):
@@ -105,6 +109,7 @@ def get_cols_like(col_list, pattern = None):
         result += [ i for i in col_list if p.search(i) is not None]
     return result 
 
+
 def disp_stats(df, cols,header = True):
     if header:
         print(f"{' ':4s} {' ':60s}: {'min':>10s}   {'max':>10s}   {'std':>10s}   {'var':>10s}   {'mean':>10s}   {'median':>10s}    {'uniq rto':>10s}    {'freq rto':>10s}   {'quantile':^50s}")
@@ -112,6 +117,7 @@ def disp_stats(df, cols,header = True):
     for ctr, i in enumerate(cols):
         print(f"{ctr:4d} {i[:60]:60s}: {df[i].min():10.2f}   {df[i].max():10.2f}   {df[i].std():10.2f}   {df[i].var():10.2f}"\
               f"   {df[i].mean():10.2f}   {df[i].median():10.2f}    {df[i].nunique()/n_rows:10.2f}    {calculate_frequency(df[i]):10.2f}     {np.quantile(df[i], [0.0,0.25, 0.50, 0.75,1.00] )}")
+
 
 def check_values(df, cols):
     # if df is not None:
@@ -133,6 +139,7 @@ def check_values(df, cols):
     if len(inv_columns) == 0:
         print(f" **** No Invalid Numeric Columns Found ****")
     return inv_columns
+
 
 def check_df_for_nans(batch, group_id, rows_read, na_rows, na_columns, df_Nans, verbose = False): 
 
@@ -176,9 +183,10 @@ def reduce_col_sizes(df, cols):
             print(f" {i} converted to int64 {dframe[i].dtype}")
     return df, flt_cnt, int_cnt
 
+
 def calculate_frequency(feature_column):
     """Calculate frequency of second most common to most common feature.
-    
+
     Parameters
     ----------
     feature_column : Pandas series of the specific feature in the population_df
@@ -187,14 +195,14 @@ def calculate_frequency(feature_column):
     -------
     Feature name if it passes threshold, "NA" otherwise
     """
-    
+
     val_count = feature_column.value_counts()
-    
+
     try:
         max_count = val_count.iloc[0]
     except IndexError:
         return np.nan
-    
+
     try:
         second_max_count = val_count.iloc[1]
     except IndexError:
@@ -203,8 +211,8 @@ def calculate_frequency(feature_column):
     freq = second_max_count / max_count
     return freq
 
-def disp_metadata_file(metadata, COMPOUND_PROFILE_COLUMNS):
 
+def disp_metadata_file(metadata, COMPOUND_PROFILE_COLUMNS):
     print("-"*80)
     print(" all_profile_columns & COMPOUND_PROFILE_COLUMNS")
     print("-"*80)
@@ -221,7 +229,7 @@ def disp_metadata_file(metadata, COMPOUND_PROFILE_COLUMNS):
     print()
     print(f"  all_profile_columns[-4:]       : {metadata['all_profile_columns'][-4:]}")
     print(f"  COMPOUND_PROFILE_COLUMNS[-4:]  : {COMPOUND_PROFILE_COLUMNS[-4:]}")
-    
+
     for k in metadata['metadata_columns'].keys():
         print("-"*80)
         print(f" {k}  - length({len(metadata['metadata_columns'][k])} )")
@@ -229,12 +237,12 @@ def disp_metadata_file(metadata, COMPOUND_PROFILE_COLUMNS):
         if isinstance(metadata['metadata_columns'][k], list):
             for v in metadata['metadata_columns'][k]:
                 print(f" \t : list item : {v}")
-    
+
         elif isinstance(metadata['metadata_columns'][k], dict):    
             for i,v in metadata['metadata_columns'][k].items():
                 print(f" \t : key :  {i:25s}     item: {v}")
         print()
-    
+
     for key in ["all_profile_columns", "metadata_columns", "selected_columns", "parquet_columns"]:
         print("\n"+"-"*80)
         print(f" {key}   {type(metadata[key])} {len(metadata[key]):5d} entries")
@@ -246,11 +254,8 @@ def disp_metadata_file(metadata, COMPOUND_PROFILE_COLUMNS):
                 print(f" {'['+j+']':30s}   {len(metadata[key][j]):4d}       {type(metadata[key][j])}")  
                 # print(f" key: {i:30s}/   {len(metadata[key][i]):5d}")
             print(f" \t\t\t  {'total:'} {ttl:5d}")     
-        # else:
-            # print(f" {key:20s}   {type(metadata[key])} {len(pickle_data[key]):5d} entries")
-##-------------------------------------------------------------------------------------
-## Training programs (4.1, 4.2, ...)
-##-------------------------------------------------------------------------------------
+        else:
+            print(f" {key:20s}   {type(metadata[key])} {len(metadata[key]):5d} entries")
 
 
 def compute_classification_metrics(model, y_true, y_pred, top_k =3, mode = 'train'):
@@ -272,7 +277,7 @@ def compute_classification_metrics(model, y_true, y_pred, top_k =3, mode = 'trai
             metrics['train_logloss'] = 0.0
             metrics['val_auc']  = 0.0
             metrics['val_logloss'] = 0.0
-            
+
     metrics['roc_auc']   = skm.roc_auc_score(y_true, y_score = y_pred)
     metrics['logloss']   = skm.log_loss(y_true, y_pred= y_pred)
     
@@ -285,22 +290,23 @@ def compute_classification_metrics(model, y_true, y_pred, top_k =3, mode = 'trai
     
     metrics['map']       = skm.average_precision_score(y_true, y_pred)
     metrics['pearson_corr'], pearson_p = sps.pearsonr(y_true, y_pred)
-    
-    return metrics    
-    
+
+    return metrics
+
+
 def print_metric_hist(metrics):
     print("-" * 80)
     for key in metrics.keys():
         _metric_array = np.array(metrics[key])
         print(f" {key:20s}    {_metric_array.mean():9.5f} +/- {_metric_array.std():.5f}")
-    print("-" * 80)    
- 
+    print("-" * 80)
+
 
 def split_Xy(input, y_col = ["Metadata_log10TPSA"] ):
     if not isinstance(y_col,list):
         y_col = list(y_col)
     y_output = input[y_col]
-    X_output = input.drop(columns=y_col)        
+    X_output = input.drop(columns=y_col)
     return X_output, y_output
 
 
@@ -310,8 +316,7 @@ def split_Xy(input, y_col = ["Metadata_log10TPSA"] ):
 
 #     frac = [1 / n_folds] * n_folds
 #     # print(frac, n_folds)
-#     splits = df_profiles.random_split(frac, shuffle=True)   
-    
+#     splits = df_profiles.random_split(frac, shuffle=True)
 #     for i in range(n_folds):
 #         train = [splits[j] for j in range(n_folds) if j != i]
 #         train = dd.concat(train)
@@ -319,20 +324,20 @@ def split_Xy(input, y_col = ["Metadata_log10TPSA"] ):
 #         X_train, y_train = split_Xy(train, y_columns)
 #         X_test , y_test  = split_Xy(test, y_columns)
 #         yield (X_train, y_train), (X_test, y_test)
-        
+
 
 def make_cv_splits_2(df_profiles, n_folds: int = 10, y_columns = None) -> Iterator[tuple[dd.DataFrame, dd.DataFrame]]:
     from itertools import chain
     if not isinstance(y_columns,list):
         y_columns = list(y_columns)
-    
+
     num_files = len(df_profiles)
     assert num_files % n_folds == 0, f" num of # bin files {num_files} must be divisible by #folds {n_folds} "
     step_size = num_files // n_folds
     idx_list = list(range(0, num_files, step_size))
     print(f" # bin files: {num_files}   # of folds {n_folds} -  (groups of {num_files // n_folds} file tuples)")
     # print(list(idx_list))
-    
+
     for i in idx_list :    
         trn_list = [np.arange(j, j+step_size) for j in idx_list if j != i]
         val_list = list(np.arange(i, i+step_size))
@@ -346,7 +351,7 @@ def make_cv_splits_2(df_profiles, n_folds: int = 10, y_columns = None) -> Iterat
             validation = dd.concat([df_profiles[j] for j in val_list])
             X_test , y_test  = split_Xy(validation, y_columns)
         yield (X_train, y_train), (X_test, y_test)
- 
+
 
 def get_dd_subset(df_ps, skiprows = 0, nrows=10, ss = None, verbose = False):
     if ss is None: 
@@ -360,7 +365,7 @@ def get_dd_subset(df_ps, skiprows = 0, nrows=10, ss = None, verbose = False):
     if verbose:
         print(f" Skip {skiprows} rows then read {nrows} rows : from  row# {_start_row} to {_end_row}")
     assert skiprows < ss_cumsum[last_partition], f"Row skip ({skiprows}) is equal or larger than dataframe ({ss_cumsum[last_partition]})" 
-    
+
     _start_row = _start_row if skiprows >0 else -1 
     st_idx = ss_floorsum[ss_floorsum.gt(_start_row)].index
     if verbose:
@@ -369,41 +374,41 @@ def get_dd_subset(df_ps, skiprows = 0, nrows=10, ss = None, verbose = False):
     if len(st_idx) == 0 :
         print(f" No partitions satisfy skiprows = {skiprows}. Last partition begins at row {ss_floorsum.tail(1).item()}")
         return -1,-1
-     
+        
     st = st_idx.min() if len(st_idx) > 0 else 0       
     counter = 0
     en = st
- 
+
     while counter < nrows  and en <= last_partition:
         counter += ss[en]
         print(f" Partition {en} (starting row: {ss_floorsum[en]}   ending row: {ss_cumsum[en]})  rows: {ss[en]}   count: {counter}")
         en +=1
-    
+
     if verbose:
         print()
         print(f" Partition range: [{st}   {en}] ---- total rows included {ss[st:en].sum()}")
- 
+
     en = en + 1 if en == st else en
-    
+
     if verbose:
         print(f" ***** output (st,en) is ({st} , {en})")
         for i in range(st, en):
             print(f" {ss_floorsum[i]}   {ss_cumsum[i]}")
         print("\n\n")
-    return st, en 
+    return st, en
 
 
-def read_binned_profile_files(file_idxs : set, filename : str = None  ,
-                              names : list = [], usecols : list = [], 
+def read_binned_profile_files(file_idxs : set, filename : str = None,
+                              names : list = [], usecols : list = [],
                               dtype : dict = {}, **kwparms) -> list :
     file_list = []
     filenames = [filename.format(x) for x in file_idxs]
     logging.info(f" Read profiles file ...")
-    
+
     for f in filenames:
-        bin_file = read_cell_profiles( f , names = names, usecols = usecols, dtype = dtype, **kwparms)
+        bin_file = read_cell_profiles(f , names = names, usecols = usecols, dtype = dtype, **kwparms)
         file_list.append(bin_file)
-    
+
     # df_iter = map(call_read_cell_profiles, training_files)
     # input_file_list = [x for x in df_iter]
     logging.info(f" Read profiles file ... complete")
@@ -414,32 +419,33 @@ def read_cell_profiles(profile_file, rows = None, header=0, names = None, usecol
     print(f" Reading cell profiles file :  {profile_file}    {kwparms}")
     df_ps = dd.read_csv(profile_file, header=header, names = names, usecols = usecols, dtype = dtype)   
     # print(f" Number of partitions:  {df_ps.npartitions}   partition(1) shape: {df_ps.get_partition(0).shape}")
-    
+
     # if skiprows is not None:
     #     print(f" Skipping {skiprows} rows")
     #     df_ps = df_ps.loc[skiprows:]
-        
+
     if rows is not None:
         print(f" Limiting output to {rows} rows")
-        df_ps = df_ps.head(npartitions = df_ps.npartitions, n=rows)        
-        df_ps = dd.from_pandas(df_ps, npartitions = 100)       
+        df_ps = df_ps.head(npartitions = df_ps.npartitions, n=rows)
+        df_ps = dd.from_pandas(df_ps, npartitions = 100)
         rows_str = f"{rows}"
     else:
         rows_str = "ALL"
-    
+
     print(f" Reading {rows_str}  rows - Number of partitions:  {df_ps.npartitions}   ")
-    print()    
+    print()
     return df_ps
+
 
 def read_cell_profiles_old(profile_file, rows = None, skiprows = None, index_cols = None):
     print(f" Reading cell profiles file :  {profile_file}")
     df_ps = dd.read_csv(profile_file, usecols=Xy_columns, dtype= Xy_columns_dtype)   
     print(f" Number of partitions:  {df_ps.npartitions}   partition(1) shape: {df_ps.get_partition(0).shape}")
-    
+
     if skiprows is not None:
         print(f" skipping {skiprows} rows")
         df_ps = df_ps[skiprows:]
-        
+
     if rows is not None:
         print(f" limiting output to {rows} rows")
         df_ps = df_ps.head(npartitions = df_ps.npartitions, n=rows)        
@@ -447,55 +453,76 @@ def read_cell_profiles_old(profile_file, rows = None, skiprows = None, index_col
         rows_str = f"{rows}"
     else:
         rows_str = "ALL"
-    print()    
+    print()
     print(f" Reading {rows_str} rows into {type(df_ps)} shape: {df_ps.shape }")
     print(f" Number of partitions:  {df_ps.npartitions}   partition(1) shape: {df_ps.get_partition(0).compute().shape}")    
     return df_ps
 
 
-def disp_trial_info(trial):
-    print(f" Best trial:  {trial.number}   Trial state: {trial.state} ")
-    print(f" start: {trial.datetime_start} , end:  {trial.datetime_complete}  duration: {trial.duration}")
-
-    print(f" Intermediate values: {trial.intermediate_values}")
-    print(f" Trial last step    : {trial.last_step} ")
-    print()
-    print(" Parameters: ")
-    print("-------------")
-    for key in trial.params:
-        print(f"    {key:30s} {trial.params[key]:.7f}    {trial.distributions.get(key, 'n/a')}     ")
-    print()
-    print(f" Trial results: {trial.values}")
-    print('\n')
 
 
-def disp_study_history(study, best_only = False):
-    print(f" {study.study_name}  study history\n")
-    print(f" Total trials in study: {len(study.trials)}")
-    best_trials = [x.number for x in study.best_trials]
-    print(f" Best trials: {best_trials}" )    
-    print(f"                start     -   completion      status        validation metrics")
-    print(f" trial#         time      -      time          code      {study.metric_names[0]}        {study.metric_names[1]}")
-    print("-"*80)
-    for st in study.trials:
-        if  (not best_only) or (best_only and st.number in best_trials):
-            dt_start = st.datetime_start.strftime('%Y-%m-%d   %H:%M:%S') if st.datetime_start is not None else '-- n/a --' 
-            dt_end   = st.datetime_complete.strftime('%H:%M:%S') if st.datetime_complete is not None else ' -n/a- ' 
-            print(f"Trial #: {st.number:<4d} {dt_start:^21s} - {dt_end:^8s}  {st.state:3d}  ", end="")
-            if st.state == TrialState.COMPLETE:
-                print(f" {st.values[0]:10.5f}   {st.values[1]:12.5f}    {st.user_attrs.get('memo', '')}")
-            elif st.state == TrialState.RUNNING:
-                print(f"        *** RUNNING ***       {st.user_attrs.get('memo', '')}")            
-            elif st.state == TrialState.PRUNED:
-                print(f"        *** PRUNED ***        {st.user_attrs.get('memo', '')}")
-            elif st.state == TrialState.FAIL:
-                print(f"        *** FAILED ***        {st.user_attrs.get('memo', '')}")
-            elif st.state == TrialState.WAITING:
-                print(f"        *** WAITING ***       {st.user_attrs.get('memo', '')}")            
-            else:
-                print("\n")
-    print(" *** end of trials *** ")
+
+def model_selection(model, params_grid, X, y,
+                    scoring = None, 
+                    cv=5, n_jobs=6, pre_dispatch = None,
+                    GridSearch = True,
+                    n_iter=20,
+                    refit = True, verbose = 0):
+    """
+    model selection (hyperparameter tuning)
+    input:
+    -----
+    model:          model to be grid searched
+    params_grid:    dictionary of hyperparms to grid search
+    X, y:           obvious
+    scoring:        scoring Strategy to evaluate the performance of the cross-validated model on the test set.
+    cv:             cross-validation fold, integer specifies the number of folds in a (Stratified)KFold,
+                    stratified is used if the estimator is a classifier and y is either binary or multiclass
+    n_iter          Number of parameter settings that are sampled in RandomizedSearchCV.
+                    n_iter trades off runtime vs quality of the solution.
+    output
+    ------
+    return the refitted model on the whole train data
+    refit:          Refit an estimator using the best found parameters on the whole dataset.
+    """
+    print(f" verbose is {verbose}")
+    if verbose > 0:
+        print(f" params_grid: {params_grid}")
+        print(f" scoring    : {scoring}     cv:  {cv}   n_jobs: {n_jobs}   gridsearch: {GridSearch}    n_iter: {n_iter}   refit: {refit}   ")
+
+    if pre_dispatch is None:
+        pre_dispatch = n_jobs
+
+    if GridSearch :
+        model_train = GridSearchCV(model, params_grid,
+                                   cv=cv,
+                                   n_jobs=n_jobs,
+                                   scoring = scoring,
+                                   pre_dispatch = pre_dispatch,
+                                   refit = refit, verbose = verbose)
+    else:
+        model_train = RandomizedSearchCV(model,
+                                         param_distributions = params_grid,
+                                         cv=cv,
+                                         n_jobs=n_jobs,
+                                         n_iter=n_iter,
+                                         scoring=scoring,
+                                         pre_dispatch = pre_dispatch,
+                                         refit = refit, verbose = verbose)
+
+    model_train.fit(X, y)
+
+    print("Best parameters set found on development set:", model_train.best_params_ )
+    print("Best score:", model_train.best_score_ )
+    print("Grid scores on development set:\n")
     
+    for mean, std, params in zip(model_train.cv_results_['mean_test_score'],
+                                 model_train.cv_results_['std_test_score'],
+                                 model_train.cv_results_['params']):
+        print("%0.5f (+/-%0.03f) for %r" % (mean, std * 2, params))
+    return model_train
+
+
 def propose_parameters(trial, objective, eval_metric):
  
     _params = {
@@ -667,12 +694,13 @@ def propose_parameters(trial, objective, eval_metric):
     }    
     return _params
 
+
 def rerun_objective(trial, disp_params = True, save = True):
     """
     Run objective without parameter sampling
     """
     metric_keys = ["train_auc","train_logloss", "val_auc", "val_logloss", "roc_auc", "logloss",
-                    "accuracy","bal_acc","top_k_acc","F1_score","map","pearson_corr"]    
+                   "accuracy", "bal_acc", "top_k_acc", "F1_score", "map", "pearson_corr"]
     study_params = {"booster"      : "gbtree",
                     "device"       : "gpu",
                     "objective"    :  "binary:logistic",
@@ -688,20 +716,19 @@ def rerun_objective(trial, disp_params = True, save = True):
         print(f" Parameters:")
         for k, v in study_params.items():
             print(f"  {k:30s} {v}")
-            
+
     iter_files = make_cv_splits_2(input_file_list, n_folds=5, y_columns=y_columns)
-    model, metrics =  train_model(iter_files, metric_keys = metric_keys, ** study_params)
+    model, metrics = train_model(iter_files, metric_keys = metric_keys, ** study_params)
 
     print_metric_hist(metrics)
     print(f" model best score    :  {model['booster'].best_score}")
     print(f" model best iteration:  {model['booster'].best_iteration}")
-    
+
     if save:
         # save_as_filename = ".\saved_models\{1}_trial_{0:03d}.json".format(study.study_name,trial.number)
         save_as_filename = ".\saved_models\{0}_rerun_{1:03d}.json".format(study.study_name,trial.number)
         print(f" Save model to : {save_as_filename}")
         model['booster'].save_model(save_as_filename)
-    
     # return np.array(metrics['val_auc']).mean(), np.array(metrics['val_logloss']).mean()
 
 
@@ -718,13 +745,13 @@ def balance_datasets(X,y, ratio = 2, verbose = False):
     # print(f"\n neg indexes - len: {len(neg_idxs)}")
     # print(neg_idxs[:50])
     # print(neg_idxs[-50:])
-    
+
     stepped_pos_idxs = [x for x in pos_idxs if x % 3 == 0]
     stepped_neg_idxs = [x for x in neg_idxs if x % 3 == 0]
     stepped_neg_idxs = np.array(stepped_neg_idxs)
     pos_counts = len(stepped_pos_idxs)
     neg_counts = len(stepped_neg_idxs)
-    
+
     if verbose:
         print(f"\n # Pos counts: {pos_counts}    # Neg counts: {neg_counts}   Total: {pos_counts+neg_counts}")
         print(f"\n pos indexes - len: {pos_counts}")
@@ -735,7 +762,7 @@ def balance_datasets(X,y, ratio = 2, verbose = False):
         print(stepped_neg_idxs[-25:])
         print()
     num_neg_samples = ratio * pos_counts
-    
+
     print(f"\n Take {pos_counts} samples from total of {pos_counts} postive training samples")
     print(f" Take {num_neg_samples} samples from total of {neg_counts} negative training samples")
     sample_idxs = skr.sample_without_replacement(n_population=neg_counts, n_samples= num_neg_samples, )
@@ -752,7 +779,7 @@ def balance_datasets(X,y, ratio = 2, verbose = False):
         print(neg_sample_idxs[:20])
         print(neg_sample_idxs[:20]+1)
         print(neg_sample_idxs[:20]+2)
-    
+
     neg_sample_idxs_3 = np.concatenate((neg_sample_idxs, neg_sample_idxs+1, neg_sample_idxs+2))
     neg_sample_idxs_3.sort()
     if verbose:
@@ -762,17 +789,15 @@ def balance_datasets(X,y, ratio = 2, verbose = False):
         print(f"\n neg_sample_idxs_3: {len(neg_sample_idxs_3)}")
         print(f" [:20] :{neg_sample_idxs_3[:20]}")
         print(f" [-20:] {neg_sample_idxs_3[-20:]}")
-    
-    balanced_ds_idxs = np.concatenate((pos_idxs, neg_sample_idxs_3))
 
+    balanced_ds_idxs = np.concatenate((pos_idxs, neg_sample_idxs_3))
     bal_X = X[balanced_ds_idxs]
     bal_y = y[balanced_ds_idxs]
 
-    print(f"\n Balanced Dataset: # pos samples: {len(pos_idxs)}    # Neg samples: {len(neg_sample_idxs_3)}  Total len: {len(balanced_ds_idxs)}")   
+    print(f"\n Balanced Dataset: # pos samples: {len(pos_idxs)}    # Neg samples: {len(neg_sample_idxs_3)}  Total len: {len(balanced_ds_idxs)}")
     print(f"\n X :  Min: {bal_X.min():.4f}    Max: {bal_X.max():.4f}   Mean: {bal_X.mean():.4f}  Std: {bal_X.std():.4f}")
     print(f" y :  Min: {bal_y.min():.4f}    Max: {bal_y.max():.4f}   Mean: {bal_y.mean():.4f}  Std: {bal_y.std():.4f}")
     return bal_X,bal_y
-
 
 
 def label_counts(input_list = None, title = None, label = None):
@@ -788,18 +813,30 @@ def label_counts(input_list = None, title = None, label = None):
         print(f" Label 0: {bcnt[0]:7,d}      % {bcnt[0]*100/bcnt_sum:2.2f} ")
         print(f" Label 1: {bcnt[1]:7,d}      % {bcnt[1]*100/bcnt_sum:2.2f} ")
         print("")
-        
+
+
 def compute_metrics(true, pred, title = 'Classification Metrics'):
     test_accuracy = skm.accuracy_score(true, pred)
     # precision : tp / (tp+fp)
     precision, recall, f1, support = skm.precision_recall_fscore_support(true, pred, average='binary', zero_division=0)
     label_count = len(true)
-    print(f" {title}")
-    print('-'*(len(title)+2))
+    print(f"{title}")
+    print('-'*(len(title)+1))
     print(f" Accuracy: {test_accuracy:.5f}     Precision: {precision:.5f}     Recall: {recall:.5f}     F1: {f1:.5f} \n"
           f"\n True + labels:        {true.sum():6.0f}     ratio to total:  {true.sum()/label_count:.5f}"
           f"\n Predicted + labels:   {pred.sum():6d}     ratio to total:  {pred.sum()/label_count:.5f}"
           f"\n True/Predicted Match: {(pred == true).sum():6d}     ratio to total:  {(pred==true).sum()/label_count:.5f}" )
+
+
+# def compute_metrics(true, pred):
+#     test_accuracy = skm.accuracy_score(true, pred)
+#     # precision : tp / (tp+fp)
+#     precision, recall, f1, support = skm.precision_recall_fscore_support(true, pred, average='binary', zero_division=0)
+#     label_count = len(true)
+#     print(f" Accuracy: {test_accuracy:.5f}     Precision: {precision:.5f}     Recall: {recall:.5f}     F1: {f1:.5f} \n"
+#           f"\n True + labels:        {true.sum():6.0f}     ratio to total:  {true.sum()/label_count:.5f}"
+#           f"\n Predicted + labels:   {pred.sum():6d}     ratio to total:  {pred.sum()/label_count:.5f}"
+#           f"\n True/Predicted Match: {(pred == true).sum():6d}     ratio to total:  {(pred==true).sum()/label_count:.5f}" )
 
 def plots_from_estimator(estim, X, y):
     rows = 1
@@ -812,6 +849,7 @@ def plots_from_estimator(estim, X, y):
     _ = axs[1].set_title(" ROC Curve ")
     plt.show()
 
+
 def plots_from_predictions(true, pred):
     rows = 1
     cols = 3
@@ -822,6 +860,7 @@ def plots_from_predictions(true, pred):
     _ = axs[0].set_title(" Precision / Recall ")
     _ = axs[1].set_title(" ROC Curve ")
     plt.show()
+
 
 def plot_cls_metrics(y_true, y_prob, y_pred, epochs = None ):
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
@@ -861,10 +900,12 @@ def plot_cls_metrics(y_true, y_prob, y_pred, epochs = None ):
 
     _ = cm_display.ax_.set_title(f"Confusion Matrix {msg_sfx}")
 
-def save_checkpoint(epoch, model, optimizer = None, scheduler = None, 
+
+def save_checkpoint(epoch, model, optimizer = None, scheduler = None, metrics = None,
                     filename = None, ckpt_path = "ckpts",
-                    update_latest=False, update_best=False, 
+                    update_latest=False, update_best=False,
                     verbose = False):
+    
     """simplified version of save_checkpoint_v5 from utils_ptsnnl"""
     import torch.nn as nn
     from types import NoneType
@@ -880,8 +921,10 @@ def save_checkpoint(epoch, model, optimizer = None, scheduler = None,
         checkpoint['model'] = model
         checkpoint['optimizer'] = optimizer.state_dict()
         checkpoint['scheduler'] = scheduler.state_dict()
+    if metrics is not None:
+        checkpoint['metrics'] = metrics
 
-    ## save model attributes 
+    ## save model attributes
     model_attributes = model.__dict__
     for key, value in model_attributes.items():
         if key not in checkpoint:
@@ -915,16 +958,18 @@ def save_checkpoint(epoch, model, optimizer = None, scheduler = None,
     logger.info(f" Model exported to {filename} - epoch: {epoch}")
 
 
-def load_checkpoint(model, optimizer = None, scheduler = None,
-                    filename = None, ckpt_path = "ckpts",
+def load_checkpoint(model, optimizer = None, scheduler = None, metrics = None,
+                    filename = None, ckpt_path = '',
+                    device = None,
                     dryrun = False,
                     verbose=False):
 
     if filename[-3:] != '.pt':
         filename += '.pt'
+
+    ckpt_file = os.path.join(ckpt_path, filename)
     if verbose:
         logging.info(f" Load model checkpoint from  {filename}")
-    ckpt_file = os.path.join(ckpt_path, filename)
 
     try:
         checkpoint = torch.load(ckpt_file)
@@ -951,6 +996,8 @@ def load_checkpoint(model, optimizer = None, scheduler = None,
             # print(checkpoint['scheduler'])
             scheduler.load_state_dict(checkpoint['scheduler'])
 
+        metrics = checkpoint.get('metrics',None)
+ 
     if verbose:
         for key, value in checkpoint.items():
             logging.info(f"{key:40s}, {str(type(value)):60s} ")
@@ -959,7 +1006,7 @@ def load_checkpoint(model, optimizer = None, scheduler = None,
                 print(k)
                 for kk,vv in model.training_history[k].items():
                     print(f" {k}-{kk}   checkpoint len: {len(vv)} ")
-        print(f"model :\n {checkpoint['model']}\n")
+        # print(f"model :\n {checkpoint['model']}\n")
 
         # for k,v in model.named_parameters():
         #     if v.requires_grad == False:
@@ -985,4 +1032,3 @@ def load_checkpoint(model, optimizer = None, scheduler = None,
         logger.info(f" Model best validation metric : {model.val_best_metric:6f} - epoch: {model.val_best_epoch}") 
 
     return model, optimizer, scheduler, epoch
-
