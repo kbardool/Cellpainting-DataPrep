@@ -16,12 +16,9 @@ from optuna.trial import TrialState
 import torch
 import torch.nn as nn
 
-
 # Exhaustive search over specified parameter values for an estimator.
 # Randomized search on hyper parameters.
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-
-
 logger = logging.getLogger(__name__) 
 
 def setup_datafiles():
@@ -70,12 +67,12 @@ def cat_columns(column_list = None):
     # elif isinstance(column_list, dict):
     #     column_list = list(column_list.keys())
     # len(column_list)
-    
+
     keys = ["Cells", "Cytoplasm", "Nuclei", "Metadata", "Image_Granularity", 
             "Image_Intensity", "Image_Texture", "Image_Threshold", "Image_ImageQuality", "Texture",
             "Channel", "Count", "ExecutionTime", "FileName", "Frame", "Granularity", "MD5Digest", "Width", "Height",
             "Series", "ModuleError", "PathName", "Scaling", "Threshold", "URL"]
-    
+
     key_len = [len(x) for x in keys]
     ttls = defaultdict(int)  ## {'Cells': 0, 'Cytoplasm': 0 , 'Nuclei' : 0, 'Metadata': 0, 'Other': 0}
     cols = defaultdict(list)
@@ -105,8 +102,8 @@ def get_cols_like(col_list, pattern = None):
         pattern = [pattern]
     result = []
     for pat in pattern:
-        p = re.compile(pat)    
-        result += [ i for i in col_list if p.search(i) is not None]
+        p = re.compile(pat)
+        result += [i for i in col_list if p.search(i) is not None]
     return result 
 
 
@@ -147,12 +144,12 @@ def check_df_for_nans(batch, group_id, rows_read, na_rows, na_columns, df_Nans, 
 
         row_check = pd.isna(row)
         bad_columns_count = row_check.astype(int).sum()
-        if  bad_columns_count == 0:
+        if bad_columns_count == 0:
                 if verbose:
                     print(f" VALID   |{group_id:4d} |{rows_read:6d} | {row_id:3d} |{na_rows:4d} | {row.Metadata_Source:9s} {row.Metadata_Batch[:20]:20s} {row.Metadata_Plate:20s}| {row.Metadata_JCP2022} |{row_check.sum():4d} |")
         else:
             na_rows += 1
-            if  bad_columns_count < 1477:
+            if bad_columns_count < 1477:
                 print(f" INVALID |{group_id:4d} |{rows_read:6d} | {row_id:3d} |{na_rows:4d} | {row.Metadata_Source:9s} {row.Metadata_Batch[:20]:20s} {row.Metadata_Plate:20s}| {row.Metadata_JCP2022} |{row_check.sum():4d} |{row.index[row_check].to_list()[:4]}")
                 # print(f" {row.index[row_check].to_list()}")
                 na_columns |= set(row.index[pd.isna(row)])
@@ -280,14 +277,13 @@ def compute_classification_metrics(model, y_true, y_pred, top_k =3, mode = 'trai
 
     metrics['roc_auc']   = skm.roc_auc_score(y_true, y_score = y_pred)
     metrics['logloss']   = skm.log_loss(y_true, y_pred= y_pred)
-    
+
     metrics['accuracy']  = skm.accuracy_score(y_true, y_pred= (y_pred >= 0.5))
     metrics['bal_acc']   = skm.balanced_accuracy_score(y_true, y_pred= (y_pred >= 0.5), adjusted = True)
-    
+
     metrics['top_k_acc'] = skm.top_k_accuracy_score(y_true, y_score = y_pred, k=top_k)
     metrics['F1_score']  = skm.f1_score(y_true, y_pred = (y_pred >= 0.5))
- 
-    
+
     metrics['map']       = skm.average_precision_score(y_true, y_pred)
     metrics['pearson_corr'], pearson_p = sps.pearsonr(y_true, y_pred)
 
@@ -338,7 +334,7 @@ def make_cv_splits_2(df_profiles, n_folds: int = 10, y_columns = None) -> Iterat
     print(f" # bin files: {num_files}   # of folds {n_folds} -  (groups of {num_files // n_folds} file tuples)")
     # print(list(idx_list))
 
-    for i in idx_list :    
+    for i in idx_list:
         trn_list = [np.arange(j, j+step_size) for j in idx_list if j != i]
         val_list = list(np.arange(i, i+step_size))
         trn_list = list(chain.from_iterable(trn_list))
@@ -349,7 +345,7 @@ def make_cv_splits_2(df_profiles, n_folds: int = 10, y_columns = None) -> Iterat
             X_test, y_test = None, None
         else:
             validation = dd.concat([df_profiles[j] for j in val_list])
-            X_test , y_test  = split_Xy(validation, y_columns)
+            X_test, y_test  = split_Xy(validation, y_columns)
         yield (X_train, y_train), (X_test, y_test)
 
 
@@ -358,7 +354,7 @@ def get_dd_subset(df_ps, skiprows = 0, nrows=10, ss = None, verbose = False):
         ss = df_ps.map_partitions(len).compute()
     ss_cumsum = ss.cumsum()
     ss_floorsum = ss.cumsum() - ss
-    last_partition = ss_cumsum.index[-1]  
+    last_partition = ss_cumsum.index[-1]
     _start_row = skiprows
     _end_row   = _start_row + nrows 
 
@@ -374,12 +370,12 @@ def get_dd_subset(df_ps, skiprows = 0, nrows=10, ss = None, verbose = False):
     if len(st_idx) == 0 :
         print(f" No partitions satisfy skiprows = {skiprows}. Last partition begins at row {ss_floorsum.tail(1).item()}")
         return -1,-1
-        
-    st = st_idx.min() if len(st_idx) > 0 else 0       
+
+    st = st_idx.min() if len(st_idx) > 0 else 0
     counter = 0
     en = st
 
-    while counter < nrows  and en <= last_partition:
+    while counter < nrows and en <= last_partition:
         counter += ss[en]
         print(f" Partition {en} (starting row: {ss_floorsum[en]}   ending row: {ss_cumsum[en]})  rows: {ss[en]}   count: {counter}")
         en +=1
@@ -459,9 +455,6 @@ def read_cell_profiles_old(profile_file, rows = None, skiprows = None, index_col
     return df_ps
 
 
-
-
-
 def model_selection(model, params_grid, X, y,
                     scoring = None, 
                     cv=5, n_jobs=6, pre_dispatch = None,
@@ -515,7 +508,7 @@ def model_selection(model, params_grid, X, y,
     print("Best parameters set found on development set:", model_train.best_params_ )
     print("Best score:", model_train.best_score_ )
     print("Grid scores on development set:\n")
-    
+
     for mean, std, params in zip(model_train.cv_results_['mean_test_score'],
                                  model_train.cv_results_['std_test_score'],
                                  model_train.cv_results_['params']):
@@ -524,7 +517,6 @@ def model_selection(model, params_grid, X, y,
 
 
 def propose_parameters(trial, objective, eval_metric):
- 
     _params = {
 
         ## --------------------------------------------------------------
@@ -534,7 +526,7 @@ def propose_parameters(trial, objective, eval_metric):
         # "objective"          :  "reg:squarederror",
         "objective"          :  objective,
         "eval_metric"        :  eval_metric,
-        
+
         "booster"            :  "gbtree",   ## trial.suggest_categorical("booster", ["gbtree", "gblinear", "dart"]),
 
         ## Device     choices: 'cpu' . . . .
@@ -543,15 +535,15 @@ def propose_parameters(trial, objective, eval_metric):
         ## nthread [default to maximum number of threads available if not set]
         ##                   Number of parallel threads used to run XGBoost. When choosing it, please keep thread contention
         ##                  and hyperthreading in mind.
-        
+
         ## disable_default_eval_metric [default= false]  Flag to disable default metric. Set to 1 or true to disable.
-       
+
         # "n_estimators"     : trial.suggest_int("n_estimators", 75, 125),
-        
+
         ## --------------------------------------------------------------
         ## Parameters for Tree Booster
         ## --------------------------------------------------------------
-        
+
         ## tree_method:      [default="auto"] The tree construction algorithm used in XGBoost. 
         ##                   Choices: "auto", "exact", "approx", "hist", this is a combination of commonly used updaters. For other updaters like refresh, set the parameter updater directly.
         ##                             auto: Same as the hist tree method.
@@ -559,14 +551,14 @@ def propose_parameters(trial, objective, eval_metric):
         ##                             approx: Approximate greedy algorithm using quantile sketch and gradient histogram.
         ##                             hist: Faster histogram optimized approximate greedy algorithm.        
         "tree_method"        : "auto",
-        
+
         ## eta/learning_rate default =0.3 Step size shrinkage used in update to prevents overfitting. 
         ## After each boosting step, we can directly get the weights of new features, and eta shrinks the feature weights to make the boosting process more conservative.
 
         "learning_rate"    : trial.suggest_float("learning_rate", 0.01, 10, log=True, step = None),
         # "learning_rate"    : trial.suggest_float("learning_rate", 0.0000001, 1, log=True, step = None),
 
-        
+
         ## GAMMA / min_split_loss: Default=0. Minimum loss reduction required to make a further partition on a leaf node of the tree. 
         ##                    The larger gamma is, the more conservative the algorithm will be.
         ##                    range: [0, Inf) 
@@ -577,7 +569,7 @@ def propose_parameters(trial, objective, eval_metric):
         ##             0 indicates no limit on depth. Beware that XGBoost aggressively consumes memory when training a deep tree. 
         ##             exact tree method requires non-zero value. 
         "max_depth"        : trial.suggest_int("max_depth", 1, 15),
-        
+
         ## min_child_weight:  [default=1] Minimum sum of instance weight (hessian) needed in a child. 
         ##                    If the tree partition step results in a leaf node with the sum of instance weight less than min_child_weight, 
         ##                    then the building process will give up further partitioning. In linear regression task, this simply corresponds
@@ -585,7 +577,7 @@ def propose_parameters(trial, objective, eval_metric):
         ##                    The larger min_child_weight is, the more conservative the algorithm will be.
         ##                    range: [0,∞]        
         "min_child_weight"   : trial.suggest_float("min_child_weight", 0, 10),
-        
+
         ## max_delta_step:    [default=0] Maximum delta step we allow each leaf output to be. 
         ##                    If the value is set to 0, it means there is no constraint. If it is set to a positive value, it can help making 
         ##                    the update step more conservative. Usually this parameter is not needed, but it might help in logistic regression 
@@ -606,10 +598,10 @@ def propose_parameters(trial, objective, eval_metric):
         ##              Note that this sampling method is only supported when tree_method is set to hist and the device is cuda; 
         ##              other tree methods only support uniform sampling.        
         "sampling_method"   : "uniform",
-        
+
         ## NOTE:  All colsample_by* parameters have a range of (0, 1], the default value of 1
         ##        and specify the fraction of columns to be subsampled.
-        
+
         ## colsample_bytree;  [default=1] is the subsample ratio of columns when constructing each tree. 
         ##                    Subsampling occurs once for every tree constructed.
         "colsample_bytree" : 1.0, ## trial.suggest_float("colsample_bytree", 0.5, 1),
@@ -617,7 +609,7 @@ def propose_parameters(trial, objective, eval_metric):
         ## colsample_bylevel: [default=1] is the subsample ratio of columns for each level. Subsampling occurs once for every new depth level reached in a tree. 
         ##                    Columns are subsampled from the set of columns chosen for the current tree.
         "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.5, 1),
-        
+
         ## colsample_bynode:  [default=1] the subsample ratio of columns for each node (split). Subsampling occurs once every time a new split is evaluated. 
         ##                    Columns are subsampled from the set of columns chosen for the current level.
         "colsample_bynode" : trial.suggest_float("colsample_bynode", 0.5, 1),
@@ -635,7 +627,7 @@ def propose_parameters(trial, objective, eval_metric):
         ## scale_pos_weight [default=1] Control the balance of positive and negative weights, useful for unbalanced classes. 
         ##                 A typical value to consider: sum(negative instances) / sum(positive instances)        
         "scale_pos_weight" : 1,
-                
+
         # tree_method string [default= auto] The tree construction algorithm used in XGBoost. See description in the reference paper and Tree Methods.
         #                  Choices: auto, exact, approx, hist, this is a combination of commonly used updaters. 
         #                           For other updaters like refresh, set the parameter updater directly.
@@ -643,22 +635,22 @@ def propose_parameters(trial, objective, eval_metric):
         #                  exact:  Exact greedy algorithm. Enumerates all split candidates`.
         #                  approx: Approximate greedy algorithm using quantile sketch and gradient histogram.
         #                  hist:   Faster histogram optimized approximate greedy algorithm.
-        
+
         # updater
         # refresh_leaf [default=1]
         # process_type [default= default]
-        
+
         # grow_policy [default= depthwise]
-        
+
         # max_leaves [default=0] Maximum number of nodes to be added. Not used by exact tree method.
         # "max_leaves"       : trial.suggest_int("max_leaves", 0, 2),
         "max_leaves"       : 0, 
 
         # max_bin, [default=256]
-        
+
         ## num_parallel_tree, [default=1]: Number of parallel trees constructed during each iteration. 
         ##                    This option is used to support boosted random forest.
-        
+
         ## multi_strategy, [default = one_output_per_tree]
         ## max_cached_hist_node, [default = 65536]
 
@@ -673,25 +665,23 @@ def propose_parameters(trial, objective, eval_metric):
         ##                      categories will be partitioned into children nodes.
         ##                      New in version 1.6.0.
         # "max_cat_to_onehot": trial.suggest_int("max_cat_to_onehot", 1, 10),
-        
+
         ## max_cat_threshold:  Maximum number of categories considered for each split. Used only by partition-based splits for preventing over-fitting.        
         ##                     New in version 1.7.0.
-        
 
         ## --------------------------------------------------------------
         ## Learning Task Parameters
-        ## --------------------------------------------------------------        
+        ## --------------------------------------------------------------
 
-        
 
         ## SET STATIC ###############################################################################
-        
+
         ## lambda [default=1, alias: reg_lambda]  L2 regularization term on weights. Increasing this value will make model more conservative.
         ##                    range: [0, Inf) 
         # "reg_lambda"       : trial.suggest_float("reg_lambda", 0, 10),
-        "reg_lambda"       : 3.2267,   
+        "reg_lambda"       : 3.2267,
 
-    }    
+    }
     return _params
 
 
@@ -905,7 +895,7 @@ def save_checkpoint(epoch, model, optimizer = None, scheduler = None, metrics = 
                     filename = None, ckpt_path = "ckpts",
                     update_latest=False, update_best=False,
                     verbose = False):
-    
+
     """simplified version of save_checkpoint_v5 from utils_ptsnnl"""
     import torch.nn as nn
     from types import NoneType
