@@ -2,8 +2,9 @@
 # from . import timestring, print_heading, print_dbg, print_underline
 # from .version import __version__
 
-from .utils_cellpainting import * 
-from utils.jcp_datasets import project_datasets
+from .jcp_datasets import project_datasets, display_project_datasets
+from .utils_cellpainting import *
+
 # from .sparsechem_utils import censored_mse_loss, censored_mae_loss,  aggregate_results, compute_metrics,   \
 #                               load_sparse, load_task_weights, class_fold_counts, fold_and_transform_inputs, \
 #                               print_metrics_cr

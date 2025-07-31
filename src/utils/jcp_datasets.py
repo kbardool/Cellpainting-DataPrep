@@ -19,16 +19,15 @@ def project_datasets(metadata_path = './metadata/', input_path='./input/', outpu
     
     ds.plateMetadata                            = f"{ds.metadata_path}{ds.prefix_lc}plate_new.csv"
     # ds.plateMetadataInputFile                   = f"{metadata_path}{prefix_lc}plate_new.csv"
-    
+
     ds.wellMetadata                             = f"{ds.metadata_path}{ds.prefix_lc}well.csv"
     # ds.wellMetadataInputFile                    = f"{metadata_path}{prefix_lc}well_new.csv"
-    
+
     ds.ORFMetadata                              = f"{ds.metadata_path}{ds.prefix_lc}orf.csv"
     ds.CrisprMetadata                           = f"{ds.metadata_path}{ds.prefix_lc}crispr.csv"
-    
+
     ds.profileMetadataFile                      = f"{ds.metadata_path}{ds.prefix_lc}profile_metadata.pkl"
     ds.parquetMetadataFile                      = f"{ds.metadata_path}{ds.prefix_lc}parquet_columns.pkl"
-    
 
     ds.compoundMetadataCleanFile                = f"{ds.output_path}{ds.prefix_lc}compound_metadata_clean.csv"
     ds.compoundMetadataSmilesFile               = f"{ds.output_path}{ds.prefix_lc}compound_metadata_smiles.csv"
@@ -39,21 +38,36 @@ def project_datasets(metadata_path = './metadata/', input_path='./input/', outpu
     ds.compoundTPSACleanFile                    = f"{ds.output_path}{ds.prefix_lc}compound_TPSA_clean.csv"
     ds.compoundMetadataPharmacophoreFile        = f"{ds.output_path}{ds.prefix_lc}compound_metadads.ta_pcfp.csv"
 
-    ds.compoundPharmacophoreSparseFile          = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_sparse.pkl"
-    ds.compoundPharmacophoreCSVFile             = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores.csv"
-    ds.compoundPharmacophoreNumPyFile           = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores.npy"
-    ds.compoundPharmacophoreNumPyZipFile        = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_zip.npz"
- 
-    
-    # ds.compoundPharmacophoreFile              = f"{output_path}{prefix_lc}compound_pcfp_sparse.pkl"
-    # ds.compoundPharmacophoreCleanFile         = f"{output_path}{prefix_lc}compound_pcfp_sparse_clean.pkl"
-    # ds.compoundPharmacophoreDenseFile         = f"{output_path}{prefix_lc}compound_pcfp_dense.npy"
-    # ds.compoundPharmacophoreDenseZipFile      = f"{output_path}{prefix_lc}compound_pcfp_dense.npz"
-    
-    # ds.CompoundExtendedMetadataFile             = f"{output_path}{prefix_lc}/compound_extended_metadata.csv"
-    # ds.CompoundExtendedMetadata5SampleFile      = f"{output_path}{prefix_lc}compound_extended_metadata_5samples.csv"
-    # ds.CompoundExtendedMetadata3SampleFile      = f"{output_path}{prefix_lc}compound_extended_metadata_3samples.csv"
-    # ds.CompoundExtendedMetadata2SampleFile      = f"{output_path}{prefix_lc}compound_extended_metadata_2samples.csv"
+    ds.compoundPharmacophoreBitVectorFile       = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_all_BitVector.pkl"
+    ds.compoundPharmacophorePickleFile          = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_all.pkl"
+    ds.compoundPharmacophoreCSVFile             = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_all.csv"
+    ds.compoundPharmacophoreCSVZipFile          = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_all.gz"
+    ds.compoundPharmacophoreNumPyFile           = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_all.npy"
+    ds.compoundPharmacophoreNumPyZipFile        = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_all.npz"
+
+    ds.compoundPharmacophoreSelectedBitVectorFile = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_{{type}}_{{order}}_bitvector.pkl"
+    ds.compoundPharmacophoreSelectedPickleFile   = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_{{type}}_{{order}}.pkl"
+    ds.compoundPharmacophoreSelectedCSVFile      = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_{{type}}_{{order}}.csv"
+    ds.compoundPharmacophoreSelectedCSVZipFile   = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_{{type}}_{{order}}.gz"
+    ds.compoundPharmacophoreSelectedNumPyFile    = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_{{type}}_{{order}}.npy"
+    ds.compoundPharmacophoreSelectedNumPyZipFile = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_{{pp_length}}_{{type}}_{{order}}.npz"
+
+    ds.compoundPharmacophoreSampleBitVectorFile  = f"{ds.output_path}{ds.prefix_lc}{{num_samples}}sample_pharmacophores_{{pp_length}}_{{type}}_{{order}}_bitvector.pkl"
+    ds.compoundPharmacophoreSamplePickleFile     = f"{ds.output_path}{ds.prefix_lc}{{num_samples}}sample_pharmacophores_{{pp_length}}_{{type}}_{{order}}.pkl"
+    ds.compoundPharmacophoreSampleCSVFile        = f"{ds.output_path}{ds.prefix_lc}{{num_samples}}sample_pharmacophores_{{pp_length}}_{{type}}_{{order}}.csv"
+    ds.compoundPharmacophoreSampleCSVZipFile     = f"{ds.output_path}{ds.prefix_lc}{{num_samples}}sample_pharmacophores_{{pp_length}}_{{type}}_{{order}}.gz"
+    ds.compoundPharmacophoreSampleNumPyFile      = f"{ds.output_path}{ds.prefix_lc}{{num_samples}}sample_pharmacophores_{{pp_length}}_{{type}}_{{order}}.npy"
+    ds.compoundPharmacophoreSampleNumPyZipFile   = f"{ds.output_path}{ds.prefix_lc}{{num_samples}}sample_pharmacophores_{{pp_length}}_{{type}}_{{order}}.npz"
+
+    # ds.compoundPharmacophoreFile               = f"{output_path}{prefix_lc}compound_pcfp_sparse.pkl"
+    # ds.compoundPharmacophoreCleanFile          = f"{output_path}{prefix_lc}compound_pcfp_sparse_clean.pkl"
+    # ds.compoundPharmacophoreDenseFile          = f"{output_path}{prefix_lc}compound_pcfp_dense.npy"
+    # ds.compoundPharmacophoreDenseZipFile       = f"{output_path}{prefix_lc}compound_pcfp_dense.npz"
+
+    # ds.CompoundExtendedMetadataFile            = f"{output_path}{prefix_lc}/compound_extended_metadata.csv"
+    # ds.CompoundExtendedMetadata5SampleFile     = f"{output_path}{prefix_lc}compound_extended_metadata_5samples.csv"
+    # ds.CompoundExtendedMetadata3SampleFile     = f"{output_path}{prefix_lc}compound_extended_metadata_3samples.csv"
+    # ds.CompoundExtendedMetadata2SampleFile     = f"{output_path}{prefix_lc}compound_extended_metadata_2samples.csv"
 
     ds.CompoundExtendedMetadataFile             = f"{ds.output_path}{ds.prefix_lc}compound_extended_metadata.csv"
     ds.CompoundExtendedMetadataMoreThan3File    = f"{ds.output_path}{ds.prefix_lc}compound_extended_metadata_morethan_3_wells.csv"
@@ -62,13 +76,9 @@ def project_datasets(metadata_path = './metadata/', input_path='./input/', outpu
     ds.CompoundExtendedMetadata3SampleFile      = f"{ds.output_path}{ds.prefix_lc}compound_extended_metadata_3samples.csv"
     ds.CompoundExtendedMetadata2SampleFile      = f"{ds.output_path}{ds.prefix_lc}compound_extended_metadata_2samples.csv"
 
-    ds.compoundPharmacophore3SampleFile         = f"{ds.output_path}{ds.prefix_lc}compound_pharmacophores_3samples.csv"
-    # ds.compoundPharmacophore3SampleNumPyFile    = f"{output_path}{prefix_lc}compound_pharmacophores_3samples.npy"
-    # ds.compoundPharmacophore3SampleNumPyZipFile = f"{output_path}{prefix_lc}compound_pharmacophores_dense_zip_3samples.npz"
-    
-    ds.CompoundProfiles2SampleFile         = f"{ds.output_path}{ds.prefix_lc}/2_sample_profiles/2sample_profiles_{{0:03d}}{{1:s}}.csv"
-    ds.CompoundProfiles3SampleFile         = f"{ds.output_path}{ds.prefix_lc}/3_sample_profiles/3sample_profiles_{{0:03d}}{{1:s}}.csv"
-    ds.CompoundProfiles5SampleFile         = f"{ds.output_path}{ds.prefix_lc}/5_sample_profiles/5sample_profiles_{{0:03d}}{{1:s}}.csv"
+    ds.CompoundProfiles2SampleFile              = f"{ds.output_path}{ds.prefix_lc}/{{num_samples}}_sample_profiles/{{num_samples}}sample_profiles_{{pp_length}}_{{type}}_{{order}}.csv"
+    ds.CompoundProfiles3SampleFile              = f"{ds.output_path}{ds.prefix_lc}/{{num_samples}}_sample_profiles/{{num_samples}}sample_profiles_{{pp_length}}_{{type}}_{{order}}.csv"
+    ds.CompoundProfiles5SampleFile              = f"{ds.output_path}{ds.prefix_lc}/{{num_samples}}_sample_profiles/{{num_samples}}sample_profiles_{{pp_length}}_{{type}}_{{order}}.csv"
 
     ## gz, bz2, zip, tar, tar.gz, tar.bz2
     # types = ['.gz', '.bz2','.zip', '.tar', '.tar.gz', '.tar.bz2']
@@ -154,15 +164,26 @@ def display_project_datasets(ds):
     print()
     print(f" Compound/Pharmacophore Files :")
     print(f" ------------------------------")
-    # print(f" compound Pharmacophore Sparse Cleaned File  : {ds.compoundPharmacophoreCleanFile}\n")
-    print(f" compound Pharmacophore Sparse File          : {ds.compoundPharmacophoreSparseFile}")
-    print(f" compound Pharmacophore CSV File             : {ds.compoundPharmacophoreCSVFile}")
-    print(f" compound Pharmacophore Numpy File           : {ds.compoundPharmacophoreNumPyFile}")
-    print(f" compound Pharmacophore Numpy Zipped File    : {ds.compoundPharmacophoreNumPyZipFile}")
+    print(f" compound Pharmacophore BitVector File            : {ds.compoundPharmacophoreBitVectorFile}")
+    print(f" compound Pharmacophore Pickle File            : {ds.compoundPharmacophorePickleFile}")
+    print(f" compound Pharmacophore CSV File               : {ds.compoundPharmacophoreCSVFile}")
+    print(f" compound Pharmacophore CSV Zip File           : {ds.compoundPharmacophoreCSVZipFile}")
+    print(f" compound Pharmacophore Numpy File             : {ds.compoundPharmacophoreNumPyFile}")
+    print(f" compound Pharmacophore Numpy Zipped File      : {ds.compoundPharmacophoreNumPyZipFile}")
     print()
-    print(f" compound Pharmacophore 3Sample File         : {ds.compoundPharmacophore3SampleFile}")
-    # print(f" compound Pharmacophore 3Sample NumPy File  : {ds.compoundPharmacophore3SampleDenseFile}")
-    # print(f" compound Pharmacophore 3Sample Dense Zipped File : {ds.compoundPharmacophore3SampleDenseZipFile}")
+    print(f" compound Pharmacophore selected BitVector File   : {ds.compoundPharmacophoreSelectedBitVectorFile}")
+    print(f" compound Pharmacophore selected Pickle File   : {ds.compoundPharmacophoreSelectedPickleFile}")
+    print(f" compound Pharmacophore selected CSV File      : {ds.compoundPharmacophoreSelectedCSVFile}")
+    print(f" compound Pharmacophore selected CSV Zip File  : {ds.compoundPharmacophoreSelectedCSVZipFile}")
+    print(f" compound Pharmacophore selected NumPy File    : {ds.compoundPharmacophoreSelectedNumPyFile}")
+    print(f" compound Pharmacophore selected NumPy Zip File: {ds.compoundPharmacophoreSelectedNumPyZipFile}")
+    print()
+    print(f" compound Pharmacophore Sampled BitVector File    : {ds.compoundPharmacophoreSampleBitVectorFile}")
+    print(f" compound Pharmacophore Sampled Pickle File    : {ds.compoundPharmacophoreSamplePickleFile}")
+    print(f" compound Pharmacophore Sampled CSV File       : {ds.compoundPharmacophoreSampleCSVFile}")
+    print(f" compound Pharmacophore Sampled CSV Zip File   : {ds.compoundPharmacophoreSampleCSVZipFile}")
+    print(f" compound Pharmacophore Sampled NumPy File     : {ds.compoundPharmacophoreSampleNumPyFile}")
+    print(f" compound Pharmacophore Sampled NumPy Zip File : {ds.compoundPharmacophoreSampleNumPyFile}")
     print()
     print(f" Compound Extended Metadata files:")
     print(f" ---------------------------------")

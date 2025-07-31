@@ -7,7 +7,7 @@ import pandas as pd
 import dask
 import dask.array as da
 import dask.dataframe as dd
-# import dask_ml.model_selection as dcv
+ 
 from matplotlib import pyplot as plt
 import sklearn.metrics as skm
 import sklearn.utils.random as skr
@@ -805,15 +805,20 @@ def label_counts(input_list = None, title = None, label = None):
         print("")
 
 
-def compute_metrics(true, pred, title = 'Classification Metrics'):
+def compute_metrics(true, pred, title = 'Classification Metrics', y_prob = None):
     test_accuracy = skm.accuracy_score(true, pred)
     # precision : tp / (tp+fp)
     precision, recall, f1, support = skm.precision_recall_fscore_support(true, pred, average='binary', zero_division=0)
+    if y_prob is not None :
+        roc_auc = skm.roc_auc_score(y_true = true, y_score = y_prob)
     label_count = len(true)
     print(f"{title}")
     print('-'*(len(title)+1))
-    print(f" Accuracy: {test_accuracy:.5f}     Precision: {precision:.5f}     Recall: {recall:.5f}     F1: {f1:.5f} \n"
-          f"\n True + labels:        {true.sum():6.0f}     ratio to total:  {true.sum()/label_count:.5f}"
+    print(f" Accuracy: {test_accuracy:.5f}     Precision: {precision:.5f}     Recall: {recall:.5f}     F1: {f1:.5f} ")
+    if y_prob is not None:
+        print(f" ROC AUC:  {roc_auc:.5f}")
+    print()
+    print(f"\n True + labels:        {true.sum():6.0f}     ratio to total:  {true.sum()/label_count:.5f}"
           f"\n Predicted + labels:   {pred.sum():6d}     ratio to total:  {pred.sum()/label_count:.5f}"
           f"\n True/Predicted Match: {(pred == true).sum():6d}     ratio to total:  {(pred==true).sum()/label_count:.5f}" )
 
@@ -829,32 +834,48 @@ def compute_metrics(true, pred, title = 'Classification Metrics'):
 #           f"\n True/Predicted Match: {(pred == true).sum():6d}     ratio to total:  {(pred==true).sum()/label_count:.5f}" )
 
 def plots_from_estimator(estim, X, y):
-    rows = 1
-    cols = 3
-    fig, axs = plt.subplots(1, cols, sharey=False, tight_layout=True, figsize=(cols *5,5))
-    _ = skm.PrecisionRecallDisplay.from_estimator(estim, X, y, plot_chance_level = True, ax = axs[0])
-    _ = skm.RocCurveDisplay.from_estimator(estim, X, y, plot_chance_level= True, ax = axs[1])
-    _ = skm.ConfusionMatrixDisplay.from_estimator(estim, X, y, ax = axs[2])
-    _ = axs[0].set_title(" Precision / Recall ")
-    _ = axs[1].set_title(" ROC Curve ")
+    rows,cols = 1,3
+    fig, axes = plt.subplots(1, cols, sharey=False, figsize=(cols *5,5))
+
+    _ = skm.PrecisionRecallDisplay.from_estimator(estim, X, y, plot_chance_level = True, ax = axes[0])
+    _ = skm.RocCurveDisplay.from_estimator(estim, X, y, plot_chance_level= True, ax = axes[1])
+    im3 = skm.ConfusionMatrixDisplay.from_estimator(estim, X, y, ax = axes[2], values_format='d', colorbar = False)
+    _ = axes[0].set_title(" Precision / Recall ")
+    _ = axes[1].set_title(" ROC Curve ")
+    _ = axes[2].set_title(" Confusion Matrix ")
+    
+    # Adding custom colorbar
+    # fig.add_axes(x position, y position, thickness, height)
+    cax = fig.add_axes([axes[2].get_position().x1+0.01, axes[2].get_position().y0, 0.01 ,axes[2].get_position().height])
+    plt.colorbar(im3.im_,  cax=cax)
     plt.show()
 
 
 def plots_from_predictions(true, pred):
-    rows = 1
-    cols = 3
-    fig, axs = plt.subplots(1, cols, sharey=False, tight_layout=True, figsize=(cols *5,5) )
-    _ = skm.PrecisionRecallDisplay.from_predictions(true, pred, plot_chance_level = True, ax = axs[0])
-    _ = skm.RocCurveDisplay.from_predictions(true, pred, plot_chance_level= True, ax = axs[1])
-    _ = skm.ConfusionMatrixDisplay.from_predictions(true, pred, ax = axs[2], values_format='d')
-    _ = axs[0].set_title(" Precision / Recall ")
-    _ = axs[1].set_title(" ROC Curve ")
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    rows, cols = 1,3
+    fig, axes = plt.subplots(rows, cols, sharey=False, figsize=(cols *6,5) )
+
+    _ = skm.PrecisionRecallDisplay.from_predictions(true, pred, plot_chance_level = True, ax = axes[0])
+    _ = skm.RocCurveDisplay.from_predictions(true, pred, plot_chance_level= True, ax = axes[1])
+    im3 = skm.ConfusionMatrixDisplay.from_predictions(true, pred, ax = axes[2], values_format='d', colorbar = False)
+    _ = axes[0].set_title(" Precision / Recall ")
+    _ = axes[1].set_title(" ROC Curve ")
+    _ = axes[2].set_title(" Confusion Matrix ")
+
+    # Adding custom colorbar
+    # fig.add_axes(x position, y position, thickness, height)
+    cax = fig.add_axes([axes[2].get_position().x1+0.01, axes[2].get_position().y0, 0.01, axes[2].get_position().height])
+    plt.colorbar(im3.im_,  cax=cax)
     plt.show()
 
 
 def plot_cls_metrics(y_true, y_prob, y_pred, epochs = None ):
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    rows, cols = 1,3
+    fig, axes = plt.subplots(rows, cols, sharey=False, figsize=(cols *6,5) )
     msg_sfx = f"- epoch:{epochs} " if epochs is not None else ""
+    
+    # ROC Curve
     roc_display = skm.RocCurveDisplay.from_predictions(
         y_true.squeeze(),
         y_prob.squeeze(), 
@@ -869,7 +890,8 @@ def plot_cls_metrics(y_true, y_prob, y_pred, epochs = None ):
         title = f" ROC curve {msg_sfx}")
         # title=f"ROC curve - TPSA Classification  \n LogLoss: {metrics['logloss'] :0.3f} AUC: {metrics['roc_auc']:0.3f} ",
     _ = roc_display.ax_.legend(fontsize=8)
-
+    
+    # Precision-Recall curve
     pr_display = skm.PrecisionRecallDisplay.from_predictions(
         y_true.squeeze(),
         y_prob.squeeze(),
@@ -881,15 +903,22 @@ def plot_cls_metrics(y_true, y_prob, y_pred, epochs = None ):
     _ = pr_display.ax_.set_title(f" Precision-Recall curve {msg_sfx}")
     _ = pr_display.ax_.legend(fontsize=8)
 
-
+    # Confusion matrix
     cm_display = skm.ConfusionMatrixDisplay.from_predictions(
         y_true.squeeze(),
         y_pred.squeeze(),
-        values_format="5d",
-        ax = axes[2])
+        values_format="d",
+        ax = axes[2],
+        colorbar = False)
 
     _ = cm_display.ax_.set_title(f"Confusion Matrix {msg_sfx}")
 
+    # Adding custom colorbar
+    # fig.add_axes(x position, y position, thickness, height)
+    cax = fig.add_axes([axes[2].get_position().x1+0.01, axes[2].get_position().y0, 0.01, axes[2].get_position().height])
+    plt.colorbar(cm_display.im_,  cax=cax)
+    plt.show()
+    return
 
 def save_checkpoint(epoch, model, optimizer = None, scheduler = None, metrics = None,
                     filename = None, ckpt_path = "ckpts",
@@ -948,8 +977,12 @@ def save_checkpoint(epoch, model, optimizer = None, scheduler = None, metrics = 
     logger.info(f" Model exported to {filename} - epoch: {epoch}")
 
 
-def load_checkpoint(model, optimizer = None, scheduler = None, metrics = None,
-                    filename = None, ckpt_path = '',
+def load_checkpoint(model,
+                    optimizer = None,
+                    scheduler = None,
+                    metrics = None,
+                    filename = None,
+                    ckpt_path = '',
                     device = None,
                     dryrun = False,
                     verbose=False):
@@ -986,7 +1019,7 @@ def load_checkpoint(model, optimizer = None, scheduler = None, metrics = None,
             # print(checkpoint['scheduler'])
             scheduler.load_state_dict(checkpoint['scheduler'])
 
-        metrics = checkpoint.get('metrics',None)
+        metrics = checkpoint.get('metrics', None)
  
     if verbose:
         for key, value in checkpoint.items():

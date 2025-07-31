@@ -16,23 +16,72 @@ from optuna.trial import TrialState
 import torch
 import torch.nn as nn
 from torchinfo import summary
-from utils.dataloader import CellpaintingDataset, InfiniteDataLoader, custom_collate_fn, dynamic_collate_fn
-from utils.utils_cellpainting import save_checkpoint, load_checkpoint
+from .dataloader import CellpaintingDataset, InfiniteDataLoader, custom_collate_fn, dynamic_collate_fn
+from .utils_cellpainting import save_checkpoint, load_checkpoint
 logger = logging.getLogger(__name__)
 
 
 
 def run_classification_inference(model, checkpoint_file, epoch, data_loader, data_type, device, report = True, plot = True):
-    checkpoint_file = checkpoint_file.format(ep=epoch)
+    checkpoint_file = checkpoint_file.format(ep=epoch)+'.pt'
+    if not os.path.isfile(checkpoint_file):
+        print(f" File: {checkpoint_file} not found!! Continue....")
+    else:
+        ## load_checkpoint(model, optimizer = None, scheduler = None, metrics = None, filename = None, ckpt_path = '', device = None, dryrun = False, verbose=False):
+        model, _, _, _ = load_checkpoint(model, optimizer = None, scheduler = None, metrics = None, filename = checkpoint_file, verbose = False)
+        _ = model.eval();
+        mdl_outputs = run_model_on_test_data(model, data_loader[data_type], device, title = data_type,  verbose = False)
+        if report:
+            mo = compute_classification_metrics(mdl_outputs, epochs = epoch, title = data_type, verbose = True)
+        if plot:
+            plot_cls_metrics(mdl_outputs.y_true, mdl_outputs.y_prob, mdl_outputs.y_pred, title = data_type, epochs = epoch )
+            plt.show()
 
-    model, _, _, _ = load_checkpoint(model, None, None, dict(), checkpoint_file, verbose = False)
-    _ = model.eval();
-    mdl_outputs = run_model_on_test_data(model, data_loader[data_type], device, title = data_type,  verbose = False)
+# def run_2model_classification_inference(model1, checkpoint_file1, data_loader1, 
+#                                          model2, checkpoint_file2, data_loader2, 
+#                                          epoch, data_type, device, report = True, plot = True):
+#     ## load_checkpoint(model, optimizer = None, scheduler = None, metrics = None, filename = None, ckpt_path = '', device = None, dryrun = False, verbose=False):
+#     checkpoint_file1 = checkpoint_file1.format(ep=epoch)
+#     model1, _, _, _ = load_checkpoint(model1, filename = checkpoint_file1, verbose = False)
+#     _ = model1.eval();
+#     mdl_outputs1 = run_model_on_test_data(model1, data_loader1[data_type], device, title = data_type,  verbose = False)
+
+#     checkpoint_file2 = checkpoint_file2.format(ep=epoch)
+#     model2, _, _, _ = load_checkpoint(model2, filename = checkpoint_file2, verbose = False)
+#     _ = model2.eval();
+#     mdl_outputs2 = run_model_on_test_data(model2, data_loader2[data_type], device, title = data_type,  verbose = False)
+
+#     if report:
+#         mo1 = compute_classification_metrics(mdl_outputs1, epochs = epoch, title = data_type, verbose = True)
+#         mo2 = compute_classification_metrics(mdl_outputs2, epochs = epoch, title = data_type, verbose = True)
+#     if plot:
+#         plot_cls_metrics(mdl_outputs1.y_true, mdl_outputs1.y_prob, mdl_outputs1.y_pred, title = data_type, epochs = epoch )
+#         plot_cls_metrics(mdl_outputs2.y_true, mdl_outputs2.y_prob, mdl_outputs2.y_pred, title = data_type, epochs = epoch )
+#         plot_2model_cls_metrics(mdl_outputs1, mdl_outputs2, title = data_type, epochs = epoch )
+#         plt.show()
+
+
+def run_N_model_classification_inference(models, checkpoint_files, data_loaders, names, epoch = -1, 
+                                         data_type = None, size = 8, title = None, device = None, report = True, plot = True):
+    model_outputs = []
+    data_type = 'test' if data_type is None else data_type
+    for mdl, ckpt_file, data_ldr in zip(models, checkpoint_files, data_loaders):
+        _ckpt_file = ckpt_file.format(ep=epoch)
+        _mdl, _, _, _ = load_checkpoint(mdl, filename = _ckpt_file, verbose = False)
+        _ = _mdl.eval();
+        _output = run_model_on_test_data(_mdl, data_ldr[data_type], device, title = data_type,  verbose = False)
+        # print(type(_output), vars(_output).keys())
+        model_outputs.append(_output )
+
     if report:
-        mo = compute_classification_metrics(mdl_outputs, epochs = epoch, title = data_type, verbose = True)
+        for mdl_output in model_outputs:
+            mo = compute_classification_metrics(mdl_output, epochs = epoch, title = data_type, verbose = True)
+
     if plot:
-        plot_cls_metrics(mdl_outputs.y_true, mdl_outputs.y_prob, mdl_outputs.y_pred, title = data_type, epochs = epoch )
-        plt.show()
+        for mdl_output, name in zip(model_outputs, names):
+            plot_cls_metrics(mdl_output.y_true, mdl_output.y_prob, mdl_output.y_pred, title = title, size = size, epochs = epoch )
+    plot_N_model_cls_metrics(model_outputs, names, title = title, size = size, epochs = epoch )
+    plt.show()
 
 
 def compute_classification_metrics(mo, epochs = -1, title = '', verbose = False):
@@ -46,12 +95,13 @@ def compute_classification_metrics(mo, epochs = -1, title = '', verbose = False)
     cm.avg_prec = skm.average_precision_score(mo.y_true, mo.y_pred)
     cm.precision, cm.recall, cm.f1, _ = skm.precision_recall_fscore_support(mo.y_true, mo.y_pred, average='binary', zero_division=0)
     cm.cls_report = skm.classification_report(mo.y_true, mo.y_pred)
+    cm.mcc = skm.matthews_corrcoef(mo.y_true, mo.y_pred)
     (mo.y_true == mo.y_pred).sum()
     # cm.test_accuracy = binary_accuracy(y_true=mo.labels, y_prob=mo.logits)
     # cm.test_f1 = binary_f1_score(y_true=mo.labels, y_prob=mo.logits)
     if verbose:
         print(f"{epochs} {title.capitalize():5s} Acc : {cm.accuracy:.2f} %    ROC Auc: {cm.roc_auc:.4f}    PR Auc:{cm.avg_prec:.4f}    F1: {cm.f1:.4f}"
-              f"    Prec: {cm.precision:.4f}  Recall: {cm.recall:.4f}    ")
+              f"    Prec: {cm.precision:.4f}  Recall: {cm.recall:.4f}  MCC:  {cm.mcc:.4f} ")
         # print(f"\n {title.capitalize()} Label counts:  True: {np.bincount(mo.y_true.squeeze())} \t Pred: {np.bincount(mo.y_pred.squeeze())} ", flush = True)
         # print(f"\n {title.capitalize()} Data Classification Report: {msg_sfx}\n")
         # print(cm.cls_report)
@@ -84,20 +134,36 @@ def display_cellpainting_batch(batch_id, batch):
         #       f"|  {int(batch[1][i]):1d}  | {batch[0][i,:4].detach().cpu().numpy()}")
 
 
+def display_pharmacophore_batch(batch_id, batch):
+    compound_id, cmphash, label = batch
+    # label_2 = np.zeros_like(label)
+    print("-"*135)
+    print(f"  Batch Id: {batch_id} {type(batch)}  Rows returned {len(batch[0])}  bits: {label.shape}  ")
+    print(f"+-----+----------------+--------------------------+------------------------------+-----+-----+--------------------------------------------------------+")
+    print(f"| idx |    batch[0]    |      batch[1]            |                                                batch[2]                                           | ") 
+    print(f"|     |   COMPOUND_ID  |       CMPHASH / BIN      |                                                FEATURES                                           | ")
+    print(f"+-----+----------------+--------------------------+------------------------------+-----+-----+--------------------------------------------------------+")
+         ###    0 | source_11 Batch2    EC000046  K04      | JCP2022_009278 |  7406361908543180200 -  8  |   0   |   62.78000    4.13964   1.79782 | [-0.4377299 -0.4474466  1.1898487  0.2051901]
+         # "  1 | source_10    | JCP2022_006020 | -9223347314827979542 |   10 |  0 | tensor([-0.6346, -0.6232, -1.6046])"
+
+    for i in range(len(label)):
+        print(f"| {i:3d} | {compound_id[i]:14s} | {cmphash[i,0]:20d}  {cmphash[i,1]:2d} | {label[i]}  |")
+
+
 
 def define_inference_datasets(cellpainting_args, ae_runmode, ae_datetime, num_cols, ae_ckpttype, input_path, tpsa_threshold = 100):
-    TRAIN_INPUT_FILE = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_train.csv"
-    TEST_INPUT_FILE  = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_train_sub_test.csv"
-    VAL_INPUT_FILE   = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_train_sub_val.csv"
-    # ALL_INPUT_FILE   = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_sub_val.csv"
+    # ALL_INPUT_FILE   = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_312000.csv"
+    TRAIN_INPUT_FILE = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_training.csv"
+    TEST_INPUT_FILE  = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_test.csv"
+    VAL_INPUT_FILE   = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_validation.csv"
 
     TRAIN_INPUT = os.path.join(input_path, TRAIN_INPUT_FILE)
     TEST_INPUT  = os.path.join(input_path, TEST_INPUT_FILE)
     VAL_INPUT   = os.path.join(input_path, VAL_INPUT_FILE)
 
-    print(f" TRAIN_INPUT:  {TRAIN_INPUT}")
-    print(f" TEST_INPUT :  {TEST_INPUT }")
-    print(f" ALL_INPUT  :  {VAL_INPUT }")
+    print(f" TRAINING INPUT   : {TRAIN_INPUT}")
+    print(f" VALIDATION_INPUT : {VAL_INPUT }")
+    print(f" TEST INPUT       : {TEST_INPUT }")
 
     cellpainting_args['training_path'] = TRAIN_INPUT
     cellpainting_args['validation_path'] = VAL_INPUT
@@ -117,45 +183,43 @@ def define_inference_datasets(cellpainting_args, ae_runmode, ae_datetime, num_co
     return data_loader
 
 
-def define_datasets(cellpainting_args, ae_runmode, ae_datetime, num_cols, ae_ckpttype, input_path, tpsa_threshold = 100):
-    TRAIN_INPUT_FILE = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_train.csv"
-    TEST_INPUT_FILE  = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_train_sub_test.csv"
-    VAL_INPUT_FILE   = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_train_sub_val.csv"
-    # ALL_INPUT_FILE   = f"3smpl_prfl_embedding_{num_cols}_HashOrder_{ae_runmode}_{ae_datetime}_{ae_ckpttype}_sub_val.csv"
+def define_profile_datasets(cellpainting_args, num_cols, input_path, tpsa_threshold = 100):
+    TRAIN_INPUT_FILE = f"3sample_profiles_{num_cols}_HashOrder_training_277200.csv"
+    VAL_INPUT_FILE   = f"3sample_profiles_{num_cols}_HashOrder_validation_21600.csv"
+    TEST_INPUT_FILE  = f"3sample_profiles_{num_cols}_HashOrder_test_12600.csv"
 
     TRAIN_INPUT = os.path.join(input_path, TRAIN_INPUT_FILE)
     TEST_INPUT  = os.path.join(input_path, TEST_INPUT_FILE)
     VAL_INPUT   = os.path.join(input_path, VAL_INPUT_FILE)
 
-    print(f" TRAIN_INPUT:  {TRAIN_INPUT}")
-    print(f" TEST_INPUT :  {TEST_INPUT }")
-    print(f" ALL_INPUT  :  {VAL_INPUT }")
+    print(f" TRAINING INPUT   : {TRAIN_INPUT}")
+    print(f" VALIDATION_INPUT : {VAL_INPUT }")
+    print(f" TEST INPUT       : {TEST_INPUT }")
 
     cellpainting_args['training_path'] = TRAIN_INPUT
     cellpainting_args['validation_path'] = VAL_INPUT
-    cellpainting_args['test_path'] = TEST_INPUT
+    cellpainting_args['test_path']      = TEST_INPUT
     cellpainting_args['tpsa_threshold'] = tpsa_threshold
-    
+
     #### Load CellPainting Dataset
     # data : keys to the dataset settings (and resulting keys in output dictionary)
-    dataset = dict()
     data_loader = dict()
 
-    print(f" load {dataset}")
     for datatype in ['train', 'val', 'test']:
-        dataset[datatype] = CellpaintingDataset(type = datatype, **cellpainting_args)
-        data_loader[datatype] = InfiniteDataLoader(dataset = dataset[datatype], batch_size=1, shuffle = False, num_workers = 0,
-                                                   collate_fn = partial(dynamic_collate_fn, tpsa_threshold = dataset[datatype].tpsa_threshold) )
+        print(f" load {datatype}")
+        _dataset = CellpaintingDataset(type = datatype, **cellpainting_args)
+        data_loader[datatype] = InfiniteDataLoader(dataset = _dataset, batch_size=1, shuffle = False, num_workers = 0,
+                                                   collate_fn = partial(dynamic_collate_fn, tpsa_threshold = _dataset.tpsa_threshold) )
 
     return data_loader
 
 
-def plot_cls_metrics(y_true, y_prob, y_pred, title = '', epochs = -1 ):
+def plot_cls_metrics(y_true, y_prob, y_pred, title = '', epochs = -1, size = 8 ):
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     _y_true = y_true.squeeze()
     _y_prob = y_prob.squeeze()
     _y_pred = y_pred.squeeze()
-    msg_sfx = f"- epoch:{epochs} " if epochs != -1 else ""
+    msg_sfx = f"- ep:{epochs} " if epochs != -1 else ""
 
     roc_display = skm.RocCurveDisplay.from_predictions(
         _y_true,
@@ -167,9 +231,9 @@ def plot_cls_metrics(y_true, y_prob, y_pred, title = '', epochs = -1 ):
 
     _ = roc_display.ax_.set(
         xlabel="False Positive Rate",
-        ylabel="True Positive Rate",
-        title = f" {title.capitalize()} data ROC curve {msg_sfx}")
-    # title=f"ROC curve - TPSA Classification  \n LogLoss: {metrics['logloss'] :0.3f} AUC: {metrics['roc_auc']:0.3f} ",
+        ylabel="True Positive Rate")
+    _ = roc_display.ax_.set_title(f" ROC curve {title.capitalize()} {msg_sfx}", size =size)
+    # _ = roc_display.ax_.set_title(f"ROC curve - TPSA Classification  \n LogLoss: {metrics['logloss'] :0.3f} AUC: {metrics['roc_auc']:0.3f} ",
     _ = roc_display.ax_.legend(fontsize=8)
 
     pr_display = skm.PrecisionRecallDisplay.from_predictions(
@@ -180,7 +244,7 @@ def plot_cls_metrics(y_true, y_prob, y_pred, title = '', epochs = -1 ):
         plot_chance_level=True,
         ax = axes[1])
 
-    _ = pr_display.ax_.set_title(f" {title.capitalize()} Data Precision-Recall curve {msg_sfx}")
+    _ = pr_display.ax_.set_title(f" Precision-Recall curve  {title.capitalize()} {msg_sfx}", size = size)
     _ = pr_display.ax_.legend(fontsize=8)
 
 
@@ -191,13 +255,45 @@ def plot_cls_metrics(y_true, y_prob, y_pred, title = '', epochs = -1 ):
         ax = axes[2],
         colorbar = False)     # Deactivate default colorbar
 
-    _ = cm_display.ax_.set_title(f" {title.capitalize()} Data Confusion Matrix {msg_sfx}")
+    _ = cm_display.ax_.set_title(f" Confusion Matrix {title.capitalize()} {msg_sfx}", size = size)
 
     # Adding custom colorbar
     cax = fig.add_axes([axes[2].get_position().x1+0.01,axes[2].get_position().y0, 0.02,axes[2].get_position().height])
     plt.colorbar(cm_display.im_,  cax=cax)
 
     # plt.colorbar(cm_display.im_, fraction=0.046, pad=0.04 )
+
+
+def plot_N_model_cls_metrics(model_outputs, names, title = '', epochs = -1, size = 9):
+    fig, axes = plt.subplots(1, 2, figsize=(12,6) )
+    msg_sfx = f"- epoch:{epochs} " if epochs != -1 else ""
+
+    for model_output, name in zip(model_outputs, names):
+        roc_display = skm.RocCurveDisplay.from_predictions(
+            model_output.y_true.squeeze(),
+            model_output.y_prob.squeeze(),
+            name=name,
+            # color="darkorange",
+            # plot_chance_level=True,
+            ax = axes[0])
+
+        pr_display = skm.PrecisionRecallDisplay.from_predictions(
+            model_output.y_true.squeeze(),
+            model_output.y_prob.squeeze(),
+            name=name,
+            pos_label= 1,
+            # plot_chance_level=True,
+            ax = axes[1])
+
+    _ = roc_display.ax_.set(
+        xlabel="False Positive Rate",
+        ylabel="True Positive Rate")
+    _ = roc_display.ax_.set_title(f" ROC curve - {title} {msg_sfx}", size = size)
+    _ = roc_display.ax_.legend(fontsize=8)
+    # _ = pr_display.ax_.set_title(f"ROC curve - TPSA Classification  \n LogLoss: {metrics['logloss'] :0.3f} AUC: {metrics['roc_auc']:0.3f} ")
+
+    _ = pr_display.ax_.set_title(f" Precision-Recall curve - {title} {msg_sfx}", size = size)
+    _ = pr_display.ax_.legend(fontsize=8)
 
 
 def run_model_on_test_data(model, data_loader, device = None, num_batches = np.inf, title = '', verbose = False):
@@ -289,6 +385,7 @@ def train(model, optimizer, dataloader, current_epoch = 0, total_epochs = 0, dev
     accuracy /= (batch_count + 1)
     return loss, accuracy
 
+    
 @torch.no_grad()
 def validation(model, dataloader, current_epoch = 0, total_epochs = 0, device = None):
     loss = 0
@@ -353,7 +450,7 @@ def fit(model, optimizer, scheduler, data_loader, metrics, start_epoch, end_epoc
 
     return metrics
 
-    
+
 def build_model(type, input = 0, hidden_1 = 0, hidden_2 = 0, hidden_3 = 0, device = None, verbose = True):
     assert type in ['single_layer', 'batch_norm', 'relu'], f" Invalid model type  {type}"
     # hierarchical network : nn.Linear(n_hidden_2, n_hidden, bias=False), BatchNorm1d(n_hidden), Tanh(),
@@ -391,7 +488,46 @@ def build_model(type, input = 0, hidden_1 = 0, hidden_2 = 0, hidden_3 = 0, devic
         _ = summary(model, verbose = 2, input_size=(30, input), col_names = SUMMARY_COL_NAMES)
     return model
 
+    
+def build_pharmacophore_model(type, input = 0, hidden_1 = 0, hidden_2 = 0, hidden_3 = 0, output= 1, device = None, verbose = True):
+    assert type in ['single_layer', 'batch_norm', 'relu'], f" Invalid model type  {type}"
+    # hierarchical network : nn.Linear(n_hidden_2, n_hidden, bias=False), BatchNorm1d(n_hidden), Tanh(),
 
+    if type == "single_layer":
+        model = nn.Sequential(
+            nn.Linear(input, hidden_1, bias=True),
+            nn.Tanh(),
+            nn.Linear(hidden_1, 1),)
+    elif type == 'batch_norm':
+        model = nn.Sequential(
+            nn.Linear(input, hidden_1, bias=True),
+            nn.BatchNorm1d(hidden_1),
+            nn.Tanh(),
+            nn.Linear(hidden_1, hidden_2, bias=True),
+            nn.BatchNorm1d(hidden_2),
+            nn.Tanh(),
+            nn.Linear(hidden_2, hidden_3, bias=True),
+            nn.BatchNorm1d(hidden_3),
+            nn.Tanh(),
+            nn.Linear(hidden_3, 1),)
+    elif type == 'relu':
+        model = nn.Sequential(
+            nn.Linear(input, hidden_1, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_1, hidden_2, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_2, hidden_3, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_3, output),)
+
+    model.to(device)
+    if verbose: 
+        SUMMARY_COL_NAMES = ["input_size", "output_size", "num_params", "params_percent", "mult_adds", "trainable"]
+        _ = summary(model, verbose = 2, input_size=(30, input), col_names = SUMMARY_COL_NAMES)
+    return model
+
+
+    
 # @torch.no_grad()
 # def validation_mse(val_steps=50):
 #     loss = 0
